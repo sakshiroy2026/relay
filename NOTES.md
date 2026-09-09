@@ -1,0 +1,40 @@
+# Relay — Build Notes
+
+## Day 1 — Skeleton
+
+**Built:** Project scaffold, Neon Postgres, migration 001 (tenants, api_keys,
+runs, steps), seed script, FastAPI with POST /v1/runs, GET /v1/runs/{id},
+/healthz, /readyz.
+
+**Decisions worth remembering:**
+
+1. **The run row and step 0 are written in ONE transaction.** psycopg opens a
+   transaction on the first statement and commits when the `with pool.connection()`
+   block exits. So you can never have a run without its opening step, or a step
+   pointing at a run that doesn't exist. This is also why the job queue lives in
+   Postgres rather than Redis — enqueueing and creating state are the same commit,
+   so there's no dual-write problem.
+
+2. **The API never calls a model.** It validates, writes, returns 202. Everything
+   expensive happens later in a worker. Consequence: a model outage cannot take
+   down the API, and p99 API latency is just a database write.
+
+3. **Three schema constraints carry the project:**
+   - `UNIQUE(run_id, step_index)` on `steps` — does nothing yet, becomes the
+     fencing token on Day 3. Split-brain protection from a DB constraint instead
+     of a lock service.
+   - Partial index `runs_claimable_idx ... WHERE status IN ('pending','running')`
+     — only indexes rows a worker could claim, so the claim query stays fast as
+     completed runs pile up.
+   - `awaiting_approval` in the `run_status` enum is deliberately absent from that
+     index predicate — that's what lets a parked run consume zero compute.
+
+4. **No ORM, raw SQL via psycopg.** The whole project is about SQL semantics
+   (SKIP LOCKED, unique-constraint fencing, transaction boundaries). An ORM would
+   hide exactly what's being demonstrated. Alembic still needs SQLAlchemy Core to
+   run migrations — that's a migration-tool dependency, not an application one.
+
+**Gotchas hit:** setuptools flat-layout package discovery (fixed with
+`[tool.setuptools.packages.find] include = ["relay*"]`), psycopg needs `Jsonb()`
+rather than `json.dumps()` for jsonb columns, Alembic needs `script.py.mako`
+present to generate revisions.
