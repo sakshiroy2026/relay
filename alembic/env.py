@@ -3,7 +3,6 @@ from sqlalchemy import create_engine
 
 from relay.config import settings
 
-
 config = context.config
 
 

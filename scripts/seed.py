@@ -13,6 +13,8 @@ def main() -> None:
                     ("dev",),
                 )
                 row = cur.fetchone()
+                if row is None:
+                    raise RuntimeError("tenant insert returned no row")
                 print("created tenant")
             else:
                 print("tenant already exists")

@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException
+from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel, Field
 
@@ -35,7 +36,10 @@ def create_run(body: CreateRunRequest) -> CreateRunResponse:
                 """,
                 (settings.dev_tenant_id, Jsonb(payload), AGENT_VERSION),
             )
-            run_id, status = cur.fetchone()
+            row = cur.fetchone()
+            if row is None:
+                raise HTTPException(status_code=500, detail="run insert returned no row")
+            run_id, status = row
 
             cur.execute(
                 """
@@ -51,7 +55,7 @@ def create_run(body: CreateRunRequest) -> CreateRunResponse:
 @router.get("/runs/{run_id}")
 def get_run(run_id: UUID) -> dict:
     with pool.connection() as conn:
-        with conn.cursor() as cur:
+        with conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
                 SELECT id, status, input, result, error,
@@ -68,6 +72,4 @@ def get_run(run_id: UUID) -> dict:
             if row is None:
                 raise HTTPException(status_code=404, detail="run not found")
 
-            cols = [d.name for d in cur.description]
-
-    return dict(zip(cols, row))
+    return row

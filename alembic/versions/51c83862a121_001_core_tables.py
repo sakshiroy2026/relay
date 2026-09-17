@@ -5,6 +5,7 @@ Revises:
 Create Date: auto
 
 """
+
 from alembic import op
 
 revision = "51c83862a121"
