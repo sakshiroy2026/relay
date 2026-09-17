@@ -5,7 +5,7 @@ class Settings(BaseSettings):
     database_url: str
     dev_tenant_id: str
 
-    model_config = SettingsConfigDict(env_file=".env")
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
 settings = Settings()  # type: ignore[call-arg]  # values come from .env

@@ -38,3 +38,11 @@ runs, steps), seed script, FastAPI with POST /v1/runs, GET /v1/runs/{id},
 `[tool.setuptools.packages.find] include = ["relay*"]`), psycopg needs `Jsonb()`
 rather than `json.dumps()` for jsonb columns, Alembic needs `script.py.mako`
 present to generate revisions.
+
+## Day 2 — claim query
+- relay/worker.py: claim (UPDATE … WHERE id = (SELECT … FOR UPDATE SKIP LOCKED LIMIT 1)) → 2s fake work → mark succeeded (guarded by lease_owner).
+- Claim commits before work: row lock lasts ms, the lease timestamp protects the run afterwards.
+- Worker survives psycopg.OperationalError (network blips, PoolTimeout): log, wait 2s, keep looping. Other exceptions still crash.
+- Drain test: 50 runs, 3 workers → 50 succeeded, 0 claimed twice, split 17/16/17.
+- attempt_count is the "claimed once" proof; lease_owner only keeps the last owner.
+- Gotcha: RELAY_API_KEY in .env broke Settings → extra="ignore" in relay/config.py.
