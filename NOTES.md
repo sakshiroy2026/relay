@@ -46,3 +46,10 @@ present to generate revisions.
 - Drain test: 50 runs, 3 workers → 50 succeeded, 0 claimed twice, split 17/16/17.
 - attempt_count is the "claimed once" proof; lease_owner only keeps the last owner.
 - Gotcha: RELAY_API_KEY in .env broke Settings → extra="ignore" in relay/config.py.
+
+## Day 3a
+- Added relay/core/ledger.py: LeaseLost, next_step_index (read once = worker's belief), append_step (UniqueViolation → LeaseLost).
+- Worker: extend_lease heartbeat, 6×3s fake steps, lease_lost handling, LEASE_SECONDS from .env (15 for tests).
+- Scripts: ledger_smoke.py (fencing by hand), show_steps.py (ledger viewer + gap check).
+- Crash test passed: A Ctrl+C'd after step 3 → B claimed at attempt 2, continued at step 4, no gaps. Stranded run rescued later by a fresh worker.
+- Next: Day 3b — Dockerfile, 3 worker containers, docker kill + docker pause fencing test.
