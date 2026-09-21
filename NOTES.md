@@ -62,3 +62,12 @@ present to generate revisions.
 - Fencing test: run e9bcda30 — worker-1 paused after step 2, worker-3 claimed after ~18s and wrote 3–6;
   on unpause worker-1 logged `lease_lost … step 3 already written`, wrote nothing, stayed Up
 - Scripted fencing test deferred to the Day 15 chaos harness
+
+
+## Day 4 — LLM client, fake model, pricing, schemas
+- One plug shape (`Response`, `LLMClient` Protocol); providers are adapters. Ledger stores OUR shape.
+- FakeLLMClient picks its reply by counting assistant turns in `messages`, not with a counter —
+  so a fresh worker after a crash gets the same reply the dead one would have.
+- Cost is computed per call and paid even when the reply fails validation.
+- Anything with HttpUrl goes to JSON via `model_dump(mode="json")`; dataclasses via `asdict`.
+- smoke test: good reply ACCEPTED, founded_year 2030 REJECTED, both cost $0.001689.
