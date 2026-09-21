@@ -53,3 +53,12 @@ present to generate revisions.
 - Scripts: ledger_smoke.py (fencing by hand), show_steps.py (ledger viewer + gap check).
 - Crash test passed: A Ctrl+C'd after step 3 → B claimed at attempt 2, continued at step 4, no gaps. Stranded run rescued later by a fresh worker.
 - Next: Day 3b — Dockerfile, 3 worker containers, docker kill + docker pause fencing test.
+
+## Day 3b — Docker + fencing test
+- First Dockerfile (python:3.13-slim, pip install ., exec-form CMD, PYTHONUNBUFFERED) + .dockerignore
+- docker-compose.yml: `worker` service, build ., env_file .env, 3 replicas → relay-worker-1..3
+- Worker id inside a container = container short id + ":1" (hostname:pid; pid is 1)
+- docker kill test: run 01ab701a — killed after step 5 (Exited 137), other worker resumed at step 6, attempts=2, no gaps
+- Fencing test: run e9bcda30 — worker-1 paused after step 2, worker-3 claimed after ~18s and wrote 3–6;
+  on unpause worker-1 logged `lease_lost … step 3 already written`, wrote nothing, stayed Up
+- Scripted fencing test deferred to the Day 15 chaos harness

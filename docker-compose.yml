@@ -19,3 +19,10 @@ services:
     volumes:
       - ./otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml
     command: ["--config=/etc/otelcol-contrib/config.yaml"]
+
+
+  worker:
+    build: .
+    env_file: .env
+    deploy:
+      replicas: 3
