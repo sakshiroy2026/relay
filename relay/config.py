@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     llm_provider: Literal["fake", "anthropic"] = "fake"
     model_planner: str = "fake-planner"
     model_cheap: str = "fake-cheap"
+    tools_provider: Literal["fake"] = "fake"
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
