@@ -17,7 +17,8 @@ Instead of an agent loop living in a process that dies when the process dies, ev
 | Ledger, leases, fencing, crash recovery | ✅ working, manually verified (evidence below) |
 | Worker pool, `SKIP LOCKED` claiming | ✅ working, 3 workers |
 | LLM client layer, output schemas, cost accounting | ✅ working, against a scripted fake model |
-| Agent loop and tools | 🔨 in progress |
+| Tools (`web_search`, `fetch_page`), tool registry, system prompt | ✅ working, against canned fake data |
+| Agent loop | 🔨 in progress |
 | Transcript replay after a crash | ⬜ next |
 | Idempotent write tools | ⬜ planned |
 | Public deployment | ⬜ planned |
@@ -124,7 +125,7 @@ Python 3.13 · FastAPI · Pydantic v2 · psycopg 3 (raw SQL, no ORM) · Alembic 
 
 Planned: Redis, OpenTelemetry, Prometheus, Grafana, Caddy, AWS EC2.
 
-**On model spend:** development runs against a scripted fake model client behind the same `LLMClient` interface a real provider will use, so durability work costs nothing to test. The fake is deterministic and chooses its reply from the conversation it is handed rather than from internal state — meaning a fresh worker resuming after a crash gets the same reply the dead one would have. When the chaos harness runs, it will run on the fake client, because it measures crash recovery rather than model quality; that will be stated alongside the numbers.
+**On model spend:** development runs against a scripted fake model client and fake tools (canned search results and pages) behind the same `LLMClient` interface a real provider will use, so durability work costs nothing to test. The fake is deterministic and chooses its reply from the conversation it is handed rather than from internal state — meaning a fresh worker resuming after a crash gets the same reply the dead one would have. When the chaos harness runs, it will run on the fake client, because it measures crash recovery rather than model quality; that will be stated alongside the numbers.
 
 ---
 
