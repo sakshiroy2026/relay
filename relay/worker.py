@@ -1,4 +1,4 @@
-"""Relay worker — Day 2: claim a run, pretend to work, mark it succeeded."""
+"""Relay worker — claim a run, run the agent loop, record how it ended."""
 
 import os
 import socket
@@ -8,17 +8,16 @@ from uuid import UUID
 
 import psycopg
 from psycopg.rows import dict_row
+from psycopg.types.json import Jsonb
 
+from relay.agent.loop import run_agent
 from relay.config import settings
-from relay.core.ledger import LeaseLost, append_step, next_step_index
+from relay.core.ledger import LeaseLost
 from relay.db import pool
 
 # ── 1. settings ──────────────────────────────────────────────────────────
-# ── 1. settings ──────────────────────────────────────────────────────────
 LEASE_SECONDS = settings.lease_seconds
 POLL_INTERVAL_SECONDS = 0.5
-FAKE_STEPS = 6  # a run is "done" once steps 1..6 exist in the ledger
-FAKE_STEP_SECONDS = 3  # stand-in for the agent loop
 DB_RETRY_SECONDS = 2  # back-off after a database error
 
 WORKER_ID = f"{socket.gethostname()}:{os.getpid()}"
@@ -70,57 +69,72 @@ def extend_lease(run_id: UUID) -> bool:
     return updated == 1
 
 
-# ── 4. finish ────────────────────────────────────────────────────────────
-def mark_succeeded(run_id: UUID) -> bool:
+# ── 4. finish (both guarded: only the current owner of a running run may finish it)
+def mark_succeeded(run_id: UUID, result: dict[str, Any]) -> bool:
     with pool.connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
                 UPDATE runs
-                SET status = 'succeeded', finished_at = now()
+                SET status = 'succeeded', result = %s, finished_at = now()
                 WHERE id = %s AND lease_owner = %s AND status = 'running'
                 """,
-                (run_id, WORKER_ID),
+                (Jsonb(result), run_id, WORKER_ID),
             )
             updated = cur.rowcount  # how many rows the UPDATE changed: 0 or 1
     return updated == 1
 
 
-# ── 5. the loop ──────────────────────────────────────────────────────────
-def do_fake_work(run_id: UUID) -> None:
-    index = next_step_index(run_id)  # read ONCE: this is our belief from here on
-    print(f"[{WORKER_ID}] {str(run_id)[:8]} starting at step {index}", flush=True)
+def mark_failed(run_id: UUID) -> bool:
+    # the reason is already in the ledger's last `error` step
+    with pool.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE runs
+                SET status = 'failed', finished_at = now()
+                WHERE id = %s AND lease_owner = %s AND status = 'running'
+                """,
+                (run_id, WORKER_ID),
+            )
+            updated = cur.rowcount
+    return updated == 1
 
-    while index <= FAKE_STEPS:
-        time.sleep(FAKE_STEP_SECONDS)  # stand-in for a model call or tool call
-        index = append_step(run_id, index, "model_call", {"fake": True}, WORKER_ID)
-        print(f"[{WORKER_ID}] {str(run_id)[:8]} wrote step {index - 1}", flush=True)
 
-        if not extend_lease(run_id):
-            raise LeaseLost(f"heartbeat failed after step {index - 1}")
-
-
+# ── 5. one run ───────────────────────────────────────────────────────────
 def run_once() -> bool:
-    run = claim_run()
+    run = claim_run()  # B
     if run is None:
         return False
 
     run_id = run["id"]
+    domain = run["input"]["domain"]  # E
     print(f"[{WORKER_ID}] claimed {run_id} (attempt {run['attempt_count']})", flush=True)
 
+    def beat() -> bool:  # F — handed to the loop, called at the top of every turn
+        return extend_lease(run_id)
+
     try:
-        do_fake_work(run_id)
-    except LeaseLost as exc:
+        result = run_agent(run_id, domain, WORKER_ID, beat)  # A
+    except LeaseLost as exc:  # D
         print(f"[{WORKER_ID}] lease_lost {str(run_id)[:8]}: {exc}", flush=True)
         return True
 
-    if mark_succeeded(run_id):
-        print(f"[{WORKER_ID}] finished {run_id}", flush=True)
+    if result is None:  # C
+        ok = mark_failed(run_id)
+        outcome = "failed"
+    else:  # G
+        ok = mark_succeeded(run_id, result)
+        outcome = "finished"
+
+    if ok:
+        print(f"[{WORKER_ID}] {outcome} {run_id}", flush=True)
     else:
         print(f"[{WORKER_ID}] LOST {run_id}: lease no longer mine", flush=True)
-    return True
+    return True  # H
 
 
+# ── 6. the poll loop ─────────────────────────────────────────────────────
 def main() -> None:
     print(f"[{WORKER_ID}] started", flush=True)
     try:
