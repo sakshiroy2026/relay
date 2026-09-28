@@ -10,7 +10,7 @@ Instead of an agent loop living in a process that dies when the process dies, ev
 
 ## Status
 
-**Under active development.** This section is updated at the end of every working session.
+**Under active development.** This section is updated at the end of every working day.
 
 | Area | State |
 |---|---|
@@ -18,8 +18,8 @@ Instead of an agent loop living in a process that dies when the process dies, ev
 | Worker pool, `SKIP LOCKED` claiming | ✅ working, 3 workers |
 | LLM client layer, output schemas, cost accounting | ✅ working, against a scripted fake model |
 | Tools (`web_search`, `fetch_page`), tool registry, system prompt | ✅ working, against canned fake data |
-| Agent loop | 🔨 written and type-checked; being wired into the workers |
-| Transcript replay after a crash | ⬜ next |
+| Agent loop inside the workers | ✅ runs end to end: request → worker → ledger → stored record |
+| Transcript replay after a crash | 🔨 next |
 | Idempotent write tools | ⬜ planned |
 | Public deployment | ⬜ planned |
 | Chaos harness and measured results | ⬜ planned |
@@ -92,11 +92,15 @@ The workload was chosen because it is multi-step (8–15 tool calls, so there is
 
 The loop is the only thing that talks to both the model and the tools; they never talk to each other. Each turn it renews the lease, asks the model, and **writes the `model_call` step (with its cost) before judging the reply**, because the provider has already billed for it. For every tool the model requests, it writes a `tool_call` step *before* running the tool and a `tool_result` step after, so a crash between the two leaves a visible "started, not confirmed" marker instead of silence. A run ends with a validated record (`final`), a rejected answer or a 15-turn cap (`error`), or a lost lease, which hands the run back to the pool.
 
+The worker around it only claims, heartbeats and finishes. It records the outcome with an UPDATE guarded by `lease_owner = me AND status = 'running'`: a heartbeat only proves ownership at the moment it ran, so the finishing write re-checks ownership in the same statement. A worker whose lease was taken over while it was finishing cannot mark someone else's run as done.
+
 ---
 
 ## Verified so far
 
 Manual tests against three worker containers and PostgreSQL on Neon. Run ids are from the project's own ledger.
+
+**Agent loop end to end** — run `55d5c198`: `POST /v1/runs` → worker-2 claimed it at attempt 1 → 11 ledger rows, indexes 0–10, no gaps (`run_started`, three `model_call` turns, three `tool_call`/`tool_result` pairs including two tool calls requested in a single model reply, `final`) → run `succeeded` with the validated company record stored. Against the fake model and fake tools.
 
 **Crash recovery** — run `01ab701a`: worker-3 wrote steps 1–5, then `docker kill` (exit 137). Worker-1 claimed the run at attempt 2 once the lease expired, resumed at step 6, and finished. Ledger 0–6, no gaps, no repeated steps.
 
@@ -104,7 +108,7 @@ Manual tests against three worker containers and PostgreSQL on Neon. Run ids are
 
 **Claim exclusivity**: 50 runs drained by 3 workers — every run processed exactly once, no run with two distinct lease owners.
 
-These were run by hand, on the placeholder workload that preceded the agent loop. The scripted 200-run chaos harness that turns them into published numbers is planned, not built.
+The crash and fencing tests were run by hand on the placeholder workload that preceded the agent loop. Crash recovery *of the agent conversation itself* needs transcript replay, which is the next piece. The scripted 200-run chaos harness that turns these into published numbers is planned, not built.
 
 ---
 
@@ -135,6 +139,6 @@ Planned: Redis, OpenTelemetry, Prometheus, Grafana, Caddy, AWS EC2.
 
 ## Roadmap
 
-Next, in order: running the agent loop end to end inside the workers; transcript replay on claim; idempotent write tools; an API key check and a per-run cost cap; public deployment; then the chaos harness and a hand-labelled golden dataset with LLM-as-judge evaluation gated in CI.
+Next, in order: transcript replay on claim; idempotent write tools; an API key check and a per-run cost cap; public deployment; then the chaos harness and a hand-labelled golden dataset with LLM-as-judge evaluation gated in CI.
 
 Later: SSRF hardening on the page-fetch tool, per-tool circuit breakers, a schema-repair ladder with model escalation, and OpenTelemetry GenAI tracing.

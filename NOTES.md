@@ -71,3 +71,42 @@ present to generate revisions.
 - Cost is computed per call and paid even when the reply fails validation.
 - Anything with HttpUrl goes to JSON via `model_dump(mode="json")`; dataclasses via `asdict`.
 - smoke test: good reply ACCEPTED, founded_year 2030 REJECTED, both cost $0.001689.
+
+## Day 5 — tools, agent loop, worker wiring
+
+**Built:** fake tools + registry (`tools.py`), the fake model's script (`fake_script.py`),
+`make_llm()`, `SYSTEM_PROMPT`, the agent loop (`loop.py`), and the worker now runs the loop.
+First end-to-end run `55d5c198`: 11 ledger rows (0–10), status `succeeded`, Acme record in `result`.
+
+### The agent loop (`run_agent`)
+1. Each turn: heartbeat ("still mine?") → ask the model → write a `model_call` row with its cost.
+2. The `model_call` row is written BEFORE checking the reply, because the provider has already charged for it.
+3. For each tool the model asks for: write `tool_call` (intent) → run the tool → write `tool_result`.
+   Writing intent first means a crash leaves a visible "started, not confirmed" marker instead of silence.
+4. It ends four ways: valid record → `final` + dict; invalid record → `error` + None;
+   15 turns used → `error` + None; lease lost → raises `LeaseLost`.
+5. Weak spot today: `messages` lives only in memory, so a worker that reclaims the run starts
+   the conversation from `[user]` again and re-pays for model calls. Day 6 replay fixes this.
+
+### The wiring (`run_once` in worker.py)
+- Claim → read `domain` from `run["input"]["domain"]` → define `beat()` = `extend_lease(run_id)`
+  → pass `beat` to `run_agent` (passed as a value, called later by the loop).
+- Only `run_agent` sits inside `try`; `except LeaseLost` directly under it → a lost run never reaches the finish code.
+- dict → `mark_succeeded(run_id, result)`; None → `mark_failed(run_id)`. Both guarded by
+  `lease_owner = me AND status = 'running'`.
+- Why guard if the loop heartbeats? The heartbeat proves "mine at that moment" only. Without the guard,
+  a frozen worker A waking up would stamp `succeeded` over a run B now owns, and B would quit at its next heartbeat.
+
+### Crash points
+- Dies after `model_call`: ledger safe, that call is paid. Today the next worker re-pays (no replay yet).
+- Dies between `tool_call` and `tool_result`: "about to run, unknown whether it happened".
+  Fine for read-only `web_search`; dangerous for `save_company` → Day 7 idempotency.
+
+### Owed
+- `MAX_TURNS = 2` sabotage (never observed).
+- Say the 5 loop sentences from memory at the start of Day 6.
+
+### Gotchas learned
+- Port 8000 is taken by another Python program → API on `--port 8001`.
+- A rebuild ends `logs -f` → restart it. Same worker ids after a rebuild = the edit wasn't saved.
+- `show_steps` takes the run id, not the worker id.
