@@ -17,10 +17,11 @@ Instead of an agent loop living in a process that dies when the process dies, ev
 | Ledger, leases, fencing, crash recovery | ✅ working, manually verified (evidence below) |
 | Worker pool, `SKIP LOCKED` claiming | ✅ working, 3 workers |
 | LLM client layer, output schemas, cost accounting | ✅ working, against a scripted fake model |
-| Tools (`web_search`, `fetch_page`), tool registry, system prompt | ✅ working, against canned fake data |
+| Tools (`web_search`, `fetch_page` on canned fake data; `lookup_existing`, `save_company`, `flag_for_review` on Postgres), tool registry, system prompt | ✅ working |
 | Agent loop inside the workers | ✅ runs end to end: request → worker → ledger → stored record |
 | Transcript replay after a crash | ✅ working, verified with `docker kill` mid-run (evidence below) |
-| Idempotent write tools | 🔨 next |
+| Idempotent write tools (per-tool key + unique constraint) | ✅ working, verified with `docker kill` inside `save_company` (evidence below) |
+| API key check, per-run budget cap | 🔨 next |
 | Public deployment | ⬜ planned |
 | Chaos harness and measured results | ⬜ planned |
 
@@ -85,7 +86,7 @@ The workload was chosen because it is multi-step (8–15 tool calls, so there is
 |---|---|
 | **Lease** | A claim on a run expires after 90 seconds unless the worker renews it. A dead worker needs no cleanup: the timestamp simply passes and the same query that claims fresh runs reclaims it. |
 | **Fencing** | `UNIQUE (run_id, step_index)` on the ledger. A stalled worker that wakes after its lease expired and tries to write a step the new owner already wrote gets a unique violation, recognises it was fenced, and aborts. Split-brain protection from a database constraint instead of a distributed lock service. |
-| **Idempotency** | Three overlapping layers: client `Idempotency-Key`, a per-tool-invocation key written *before* execution, and a database uniqueness constraint on the output table. |
+| **Idempotency** | Three overlapping layers: client `Idempotency-Key` (planned), a per-tool-invocation key written *before* execution, and a database uniqueness constraint on the output table (both built). The key is `<run_id>:<tool_call_id>`, so a re-run after a crash reuses it, and the write commits in the same transaction as the key's "done" mark. |
 | **Replay** | A new worker rebuilds the conversation by reading the ledger in order. Not code re-execution — the transcript was written down, so recovery is a `SELECT … ORDER BY` and a loop. |
 
 ### The agent loop
@@ -106,7 +107,13 @@ Manual tests against three worker containers and PostgreSQL on Neon. Run ids are
 
 **Replay after a crash, mid-run** — run `7b0200c8`: worker-2 wrote steps 1–3 (the first model call and its search), then `docker kill`. Worker-3 claimed the run at attempt 2 once the 15 s test lease expired, rebuilt the conversation from the ledger, and wrote step 4: the *second* model reply, not the first one again. The run finished with exactly 3 `model_call` rows, the same as a run that never crashed, 11 rows 0–10, no gaps. Nothing was paid for twice.
 
-**Replay after a crash, mid-tool** — run `efbc7f52`: worker-2 was killed after writing a `fetch_page` `tool_call` (step 5) and before its result, using a temporary 3 s delay in the fake fetch that isn't in the code. Worker-1 resumed, saw a tool call with no result, and re-ran it *before* asking the model anything: a new `tool_call` for the same call id at step 6, the result at step 7, then the remaining fetch. 3 `model_call` rows, 12 rows, no gaps. Re-running is safe today because both tools only read. Idempotent write tools come next.
+**Replay after a crash, mid-tool** — run `efbc7f52`: worker-2 was killed after writing a `fetch_page` `tool_call` (step 5) and before its result, using a temporary 3 s delay in the fake fetch that isn't in the code. Worker-1 resumed, saw a tool call with no result, and re-ran it *before* asking the model anything: a new `tool_call` for the same call id at step 6, the result at step 7, then the remaining fetch. 3 `model_call` rows, 12 rows, no gaps. Re-running is safe here because both fetch tools only read. The next two runs show the write case.
+
+**Exactly one company row after a crash inside `save_company`** — run `bf7b65a7`: worker-2 saved the company (the row and its `tool_invocations` receipt committed together at 11:58:46) and was killed before logging the `tool_result`. Worker-1 resumed, re-issued the same call with the same idempotency key, found the receipt marked done, and returned the stored result without writing. `SELECT count(*) FROM companies WHERE domain = …` = 1, the row was never updated, and the receipt shows `attempts = 2, executions = 1`.
+
+**Crash before the write committed** — run `fa4340ca`: worker-2 recorded the key and was killed before its write. Worker-1 re-ran the call and did the write once. Again 1 row, `attempts = 2, executions = 1`. Both runs used temporary delays inside the tool to aim the kill; those delays aren't in the code.
+
+`scripts/idempotency_smoke.py` exercises the same paths without workers: the same key twice is executed once, a second key for the same domain updates the one existing row, and a key left `in_flight` by a dead worker executes exactly once.
 
 `scripts/check_run.py` checks every run above for index gaps and repeated model calls. The "already finished" and "already failed" replay paths are covered by unit tests (`tests/test_replay.py`) but haven't been hit live.
 
@@ -147,6 +154,6 @@ Planned: Redis, OpenTelemetry, Prometheus, Grafana, Caddy, AWS EC2.
 
 ## Roadmap
 
-Next, in order: idempotent write tools; an API key check and a per-run cost cap; public deployment; then the chaos harness and a hand-labelled golden dataset with LLM-as-judge evaluation gated in CI.
+Next, in order: an API key check and a per-run cost cap; a one-page live demo view; public deployment; then the chaos harness and a hand-labelled golden dataset with LLM-as-judge evaluation gated in CI.
 
 Later: SSRF hardening on the page-fetch tool, per-tool circuit breakers, a schema-repair ladder with model escalation, and OpenTelemetry GenAI tracing.
