@@ -27,10 +27,32 @@ Instead of an agent loop living in a process that dies when the process dies, ev
 | Idempotent write tools (per-tool key + unique constraint) | ✅ working, verified with `docker kill` inside `save_company` (evidence below) |
 | API key check, per-run budget cap | ✅ working (evidence below) |
 | Live demo page (`GET /`, polls the ledger once a second) | ✅ working, kill-and-resume shown live (screenshot above) |
-| Chaos harness and measured results | 🔨 next |
+| Chaos harness and measured results | ✅ 200 runs (results below) |
+| Real model provider | 🔨 next (everything so far runs on a scripted fake model) |
 | Public deployment | ⬜ planned |
 
-No measured reliability or accuracy numbers are published yet. They will appear here when the chaos harness and eval suite have actually produced them.
+---
+
+## Measured results
+
+`python -m chaos.crash_test --n 200`: each iteration starts a run, waits a random 0–10 s, runs `docker kill` on the container that owns the run, waits for the run to finish, and checks its ledger. The runs go one at a time.
+
+| Metric | Result |
+|---|---|
+| Runs | 200 |
+| Killed mid-run | 196 (the other 4 weren't claimed yet at the kill moment, so nothing was killed) |
+| Killed runs that still finished `succeeded` | **196 / 196** |
+| Model calls paid twice | **0** |
+| Duplicate company rows | **0** |
+| Write-tool effects committed more than once | **0** (13 `save_company` calls were re-issued after a kill and executed once) |
+| Ledger rows replayed instead of redone | 1,212 (including 302 model calls not paid again) |
+| Tool calls re-run after a kill landed mid-tool | 30 |
+| Tokens a cold restart would have spent again | 492,938 of 1,440,982 in the killed runs (34%) |
+| Time from kill to the next worker's first step | median 15.8 s, p90 16.9 s |
+
+**Conditions:** a scripted fake model and fake search/fetch tools, with real PostgreSQL writes (Neon). 3 worker containers, a 15 s lease, and a 1.5 s fake model delay. The harness measures crash recovery, not answer quality, so it runs on the fake client. Time to resume tracks the lease setting; with the default 90 s lease it would be up to 90 s. Raw per-run data: [`chaos/iterations.jsonl`](chaos/iterations.jsonl); summary: [`chaos/results.json`](chaos/results.json); method and caveats: [`learn/CHAOS.md`](learn/CHAOS.md).
+
+No accuracy numbers are published yet. They need a real model and a hand-labelled dataset.
 
 ---
 
@@ -134,7 +156,7 @@ Manual tests against three worker containers and PostgreSQL on Neon. Run ids are
 
 **Claim exclusivity**: 50 runs drained by 3 workers — every run processed exactly once, no run with two distinct lease owners.
 
-All of these were run by hand, one run at a time, against the fake model and fake tools. The `01ab701a` and `e9bcda30` tests predate the agent loop. The scripted 200-run chaos harness that turns them into published numbers is planned, not built.
+All of these were run by hand, one run at a time, against the fake model and fake tools. The `01ab701a` and `e9bcda30` tests predate the agent loop. The 200-run chaos harness (see Measured results) repeats the kill test with random kill points.
 
 ---
 
@@ -159,12 +181,14 @@ Python 3.13 · FastAPI · Pydantic v2 · psycopg 3 (raw SQL, no ORM) · Alembic 
 
 Planned: Redis, OpenTelemetry, Prometheus, Grafana, Caddy, AWS EC2.
 
-**On model spend:** development runs against a scripted fake model client and fake tools (canned search results and pages) behind the same `LLMClient` interface a real provider will use, so durability work costs nothing to test. The fake is deterministic and chooses its reply from the conversation it is handed rather than from internal state — meaning a fresh worker resuming after a crash gets the same reply the dead one would have. When the chaos harness runs, it will run on the fake client, because it measures crash recovery rather than model quality; that will be stated alongside the numbers.
+**On model spend:** development runs against a scripted fake model client and fake tools (canned search results and pages) behind the same `LLMClient` interface a real provider will use, so durability work costs nothing to test. The fake is deterministic and chooses its reply from the conversation it is handed rather than from internal state — meaning a fresh worker resuming after a crash gets the same reply the dead one would have. The chaos harness ran on the fake client, because it measures crash recovery rather than model quality; this is stated next to the numbers.
 
 ---
 
 ## Roadmap
 
-Next, in order: the chaos harness (measured crash-recovery numbers); public deployment; then a hand-labelled golden dataset with LLM-as-judge evaluation gated in CI.
+Currently implements durable execution, lease-based claiming with fencing, transcript replay, tool-level idempotency with a database backstop, an API key and per-run budget, a live demo page, and measured chaos-harness results.
+
+Next, in order: the switch from the fake model to a real provider (with real search and page fetch); public deployment; then a hand-labelled golden dataset with LLM-as-judge evaluation gated in CI.
 
 Later: SSRF hardening on the page-fetch tool, per-tool circuit breakers, a schema-repair ladder with model escalation, and OpenTelemetry GenAI tracing.

@@ -1,0 +1,34 @@
+{
+  "setup": {
+    "model": "fake (scripted), tools: fake search/fetch + real Postgres writes",
+    "fake_delay_seconds": 1.5,
+    "lease_seconds": 15,
+    "workers": 3,
+    "kill_window_seconds": [
+      0.0,
+      10.0
+    ]
+  },
+  "iterations": 200,
+  "killed_mid_run": 196,
+  "no_kill_before_claim": 4,
+  "no_kill_after_finish": 0,
+  "killed_and_succeeded": 196,
+  "resume_to_completion_rate": 1.0,
+  "all_runs_succeeded": 200,
+  "runs_failing_check_run": 0,
+  "duplicate_model_calls": 0,
+  "domains_with_more_than_one_company": 0,
+  "write_invocations_executed_more_than_once": 0,
+  "runs_with_company_rows_not_1": 0,
+  "pre_kill_rows_replayed": 1212,
+  "pre_kill_model_calls_not_repaid": 302,
+  "tool_calls_re_executed_after_crash": 30,
+  "save_company_reissued_but_executed_once": 13,
+  "kills_after_final_before_finish": 0,
+  "tokens_a_cold_restart_would_respend": 492938,
+  "tokens_total_in_killed_runs": 1440982,
+  "token_share_saved_vs_cold_restart": 0.3421,
+  "median_time_to_resume_s": 15.77,
+  "p90_time_to_resume_s": 16.92
+}

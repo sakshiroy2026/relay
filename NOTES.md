@@ -134,3 +134,9 @@ Proofs: 401 without / with a wrong key, 202 with the key; budget run `e8280abe`
 See learn/FRONTEND.md. Explain-back owed.
 Proof: run `783a03b3` started from the page, owner killed after step 3, takeover banner
 at step 4, succeeded (screenshot `learn/img/frontend-takeover.jpg`).
+
+## Chaos harness
+
+See learn/CHAOS.md. Explain-back owed.
+200 runs, 196 killed mid-run, 196 succeeded; 0 repeated model calls, 0 duplicate companies,
+0 write effects committed twice; median resume 15.8 s (lease 15 s, fake delay 1.5 s).
