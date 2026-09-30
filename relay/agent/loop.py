@@ -10,6 +10,8 @@ COMES OUT   The validated company record as a dict, or None if the run
             failed (the reason is in the last `error` step).
 TOUCHES     The steps table: one read (replay_ledger), then writes via
             append_step. `messages` is rebuilt from the ledger on every claim.
+            Tools may write companies / tool_invocations; every tool call gets
+            an idempotency key '<run_id>:<tool_call_id>' (Day 7).
 FAILS WHEN  heartbeat() is False or a step index is taken -> LeaseLost is
             raised for the worker to handle. Model mistakes never raise: bad
             tool calls come back as ok=False observations; a bad final answer
@@ -25,7 +27,7 @@ from pydantic import ValidationError
 
 from relay.agent.prompts import SYSTEM_PROMPT
 from relay.agent.schemas import CompanyRecord
-from relay.agent.tools import TOOL_SCHEMAS, dispatch_tool
+from relay.agent.tools import TOOL_SCHEMAS, ToolContext, dispatch_tool
 from relay.config import settings
 from relay.core.ledger import LeaseLost, append_step
 from relay.core.replay import replay_ledger
@@ -38,21 +40,27 @@ MAX_TURNS = 15  # counts model_call rows already in the ledger, not just this wo
 
 def _run_tool(
     run_id: UUID,
+    domain: str,
     index: int,
     tc: ToolCall,
     worker_id: str,
     messages: list[dict[str, Any]],
 ) -> int:
     """tool_call -> run it -> tool_result -> tool message. Returns the next index."""
+    # Day 7: the key comes from the model's call id, NOT the step index: a re-run after
+    # a crash (Day 6) writes a new tool_call row at a new index but must reuse the key.
+    idem_key = f"{run_id}:{tc.id}"
+    ctx = ToolContext(run_id=run_id, domain=domain, step_index=index, idem_key=idem_key)
+
     index = append_step(
         run_id,
         index,
         "tool_call",
-        {"tool": tc.name, "args": tc.args, "tool_call_id": tc.id},
+        {"tool": tc.name, "args": tc.args, "tool_call_id": tc.id, "idem_key": idem_key},
         worker_id,
     )
 
-    outcome = dispatch_tool(tc.name, tc.args)
+    outcome = dispatch_tool(tc.name, tc.args, ctx)
 
     index = append_step(
         run_id,
@@ -92,8 +100,8 @@ def run_agent(
     heartbeat: Callable[[], bool],
 ) -> dict[str, Any] | None:
     # --- SETUP: read the chart before doing anything ---
-    # `domain` is not needed here any more: the user message is rebuilt from the
-    # run_started row. Day 7's save_company uses it.
+    # The user message is rebuilt from the run_started row; `domain` goes to the
+    # tools (save_company writes under the run's own domain).
     llm = make_llm()
     state = replay_ledger(run_id)  # one read; state.next_index is our belief from here on
 
@@ -111,7 +119,7 @@ def run_agent(
 
     # --- Died mid-tool: run what the last reply asked for but never got back ---
     for tc in state.pending_tool_calls:
-        index = _run_tool(run_id, index, tc, worker_id, messages)
+        index = _run_tool(run_id, domain, index, tc, worker_id, messages)
 
     for turn in range(state.turns_used, MAX_TURNS):
         # --- C: still ours? Check before spending money. ---
@@ -150,7 +158,7 @@ def run_agent(
 
         # --- H, F, A, K: for each tool the model asked for ---
         for tc in response.tool_calls:
-            index = _run_tool(run_id, index, tc, worker_id, messages)
+            index = _run_tool(run_id, domain, index, tc, worker_id, messages)
 
     # --- L: MAX_TURNS passed with no final answer ---
     append_step(run_id, index, "error", {"reason": "max_turns", "max_turns": MAX_TURNS}, worker_id)

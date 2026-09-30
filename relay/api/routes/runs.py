@@ -10,7 +10,7 @@ from relay.db import pool
 
 router = APIRouter(prefix="/v1", tags=["runs"])
 
-AGENT_VERSION = "enrich@v1"
+AGENT_VERSION = "enrich@v2"  # v2 (Day 7): prompt lists the internal tools; saves before answering
 
 
 class CreateRunRequest(BaseModel):

@@ -1,16 +1,47 @@
+"""The agent's toolbox: five tools, a registry, and one dispatcher.
+
+WHAT IT IS  Everything the model is allowed to do. External tools (web_search,
+            fetch_page) are fake today; internal tools (lookup_existing,
+            save_company, flag_for_review) touch Relay's own database.
+GOES IN     dispatch_tool(name, args, ctx): the tool the model asked for, its raw
+            args, and a ToolContext (which run, its domain, this call's
+            tool_call index and idempotency key). Read tools ignore ctx.
+COMES OUT   ToolResult(ok, content): content is exactly what the model reads.
+TOUCHES     save_company: companies + tool_invocations (via run_once).
+            lookup_existing: reads companies. The rest: nothing.
+FAILS WHEN  Model mistakes (unknown tool, bad args, 404) -> ok=False result, never
+            raised. An internal tool called without ctx, or a database error,
+            is a bug or an outage -> raised, so it crashes loudly.
+"""
+
 import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
+from uuid import UUID
 
+import psycopg
+from psycopg.types.json import Jsonb
 from pydantic import BaseModel, Field, HttpUrl, ValidationError
 
-from relay.agent.schemas import PageText, SearchResult
+from relay.agent.schemas import CompanyRecord, PageText, SearchResult
 from relay.config import settings
+from relay.core.idempotency import run_once
+from relay.db import pool
 
 
 class ToolError(Exception):
     """An expected tool failure (page not found, site down). Shown to the model, not a crash."""
+
+
+@dataclass(frozen=True)
+class ToolContext:
+    """Which run a tool call belongs to. Built by the loop, never by the model."""
+
+    run_id: UUID
+    domain: str  # the run's own domain (runs.input), not one the model names
+    step_index: int  # index of this call's tool_call row
+    idem_key: str  # '<run_id>:<tool_call_id>': the same on every re-run of this call
 
 
 # ── What the model must send for each tool ─────────────────────────────
@@ -20,6 +51,16 @@ class WebSearchInput(BaseModel):
 
 class FetchPageInput(BaseModel):
     url: HttpUrl
+
+
+class LookupExistingInput(BaseModel):
+    domain: str = Field(min_length=3, max_length=253)
+
+
+class FlagForReviewInput(BaseModel):
+    field: str = Field(min_length=1, max_length=50)
+    question: str = Field(min_length=1, max_length=500)
+    options: list[str] = Field(default_factory=list, max_length=10)
 
 
 # ── The pretend internet (tools_provider = "fake") ──────────────────────
@@ -59,16 +100,103 @@ _FAKE_PAGES: dict[str, PageText] = {
 }
 
 
-def _fake_web_search(args: WebSearchInput) -> str:
+def _fake_web_search(args: WebSearchInput, _ctx: ToolContext | None) -> str:
     results = _FAKE_SEARCH.get(args.query.strip().lower(), [])
     return json.dumps([r.model_dump(mode="json") for r in results])
 
 
-def _fake_fetch_page(args: FetchPageInput) -> str:
+def _fake_fetch_page(args: FetchPageInput, _ctx: ToolContext | None) -> str:
     page = _FAKE_PAGES.get(str(args.url))
     if page is None:
         raise ToolError(f"could not fetch {args.url}: 404 not found")
     return page.model_dump_json()
+
+
+# ── Internal tools (Relay's own database) ───────────────────────────────
+def _need(ctx: ToolContext | None) -> ToolContext:
+    if ctx is None:
+        raise RuntimeError("internal tools need a ToolContext (called outside the loop?)")
+    return ctx
+
+
+def _lookup_existing(args: LookupExistingInput, ctx: ToolContext | None) -> str:
+    run_id = _need(ctx).run_id
+    with pool.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT name, hq_country, founded_year, industry, employee_range,
+                       funding_stage, description, sources
+                FROM companies
+                WHERE domain = %s
+                  AND tenant_id = (SELECT tenant_id FROM runs WHERE id = %s)
+                """,
+                (args.domain, run_id),
+            )
+            row = cur.fetchone()
+    if row is None:
+        return json.dumps({"found": False, "domain": args.domain})
+    keys = ["name", "hq_country", "founded_year", "industry", "employee_range"]
+    keys += ["funding_stage", "description", "sources"]
+    return json.dumps({"found": True, "domain": args.domain, **dict(zip(keys, row, strict=True))})
+
+
+_SAVE_SQL = """
+INSERT INTO companies (tenant_id, domain, name, hq_country, founded_year, industry,
+                       employee_range, funding_stage, description, sources, confidence,
+                       created_by_run)
+SELECT tenant_id, %(domain)s, %(name)s, %(hq_country)s, %(founded_year)s, %(industry)s,
+       %(employee_range)s, %(funding_stage)s, %(description)s, %(sources)s, %(confidence)s, id
+FROM runs WHERE id = %(run_id)s
+ON CONFLICT (tenant_id, domain) DO UPDATE SET
+    name           = EXCLUDED.name,
+    hq_country     = EXCLUDED.hq_country,
+    founded_year   = EXCLUDED.founded_year,
+    industry       = EXCLUDED.industry,
+    employee_range = EXCLUDED.employee_range,
+    funding_stage  = EXCLUDED.funding_stage,
+    description    = EXCLUDED.description,
+    sources        = EXCLUDED.sources,
+    confidence     = EXCLUDED.confidence,
+    updated_at     = now()
+RETURNING id, (xmax = 0) AS created
+"""
+
+
+def _save_company(args: CompanyRecord, ctx: ToolContext | None) -> str:
+    c = _need(ctx)
+    record = args.model_dump(mode="json")
+
+    def execute(cur: psycopg.Cursor[Any]) -> dict[str, Any]:
+        cur.execute(
+            _SAVE_SQL,
+            {
+                **record,
+                "domain": c.domain,  # the run's domain, whatever the model called it
+                "sources": Jsonb(record["sources"]),
+                "confidence": Jsonb(record["confidence"]),
+                "run_id": c.run_id,
+            },
+        )
+        row = cur.fetchone()
+        if row is None:
+            raise RuntimeError(f"run {c.run_id} not found while saving its company")
+        return {"company_id": str(row[0]), "domain": c.domain, "created": bool(row[1])}
+
+    return json.dumps(run_once(c.idem_key, c.run_id, c.step_index, "save_company", execute))
+
+
+def _flag_for_review(args: FlagForReviewInput, _ctx: ToolContext | None) -> str:
+    # Simplest version: the note lives in the tool_result row. No approvals table,
+    # and the run is not parked (awaiting_approval is out of scope for now).
+    return json.dumps(
+        {
+            "flagged_field": args.field,
+            "question": args.question,
+            "options": args.options,
+            "status": "noted for human review; keep the field in flagged_fields",
+        }
+    )
 
 
 # ── The toolbox ─────────────────────────────────────────────────────────
@@ -77,7 +205,7 @@ class Tool:
     name: str
     description: str
     input_model: type[BaseModel]
-    run: Callable[[Any], str]
+    run: Callable[[Any, ToolContext | None], str]
 
 
 @dataclass(frozen=True)
@@ -101,10 +229,34 @@ _FAKE_TOOLS = (
     ),
 )
 
+_INTERNAL_TOOLS = (
+    Tool(
+        name="lookup_existing",
+        description="Check whether a company record already exists for a domain.",
+        input_model=LookupExistingInput,
+        run=_lookup_existing,
+    ),
+    Tool(
+        name="save_company",
+        description=(
+            "Save the finished company record for this run's domain. "
+            "Safe to retry: the same call never saves twice."
+        ),
+        input_model=CompanyRecord,
+        run=_save_company,
+    ),
+    Tool(
+        name="flag_for_review",
+        description="Ask a human to review one field you could not settle from sources.",
+        input_model=FlagForReviewInput,
+        run=_flag_for_review,
+    ),
+)
+
 
 def _build_registry() -> dict[str, Tool]:
     if settings.tools_provider == "fake":
-        return {tool.name: tool for tool in _FAKE_TOOLS}
+        return {tool.name: tool for tool in (*_FAKE_TOOLS, *_INTERNAL_TOOLS)}
     raise RuntimeError(f"no tools for provider {settings.tools_provider!r}")
 
 
@@ -121,7 +273,7 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
 ]
 
 
-def dispatch_tool(name: str, args: dict[str, Any]) -> ToolResult:
+def dispatch_tool(name: str, args: dict[str, Any], ctx: ToolContext | None = None) -> ToolResult:
     tool = REGISTRY.get(name)
     if tool is None:
         return ToolResult(
@@ -134,6 +286,6 @@ def dispatch_tool(name: str, args: dict[str, Any]) -> ToolResult:
         return ToolResult(ok=False, content=f"invalid arguments for {name}: {exc}")
 
     try:
-        return ToolResult(ok=True, content=tool.run(validated))
+        return ToolResult(ok=True, content=tool.run(validated, ctx))
     except ToolError as exc:
         return ToolResult(ok=False, content=str(exc))

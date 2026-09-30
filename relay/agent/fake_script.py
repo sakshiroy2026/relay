@@ -1,4 +1,4 @@
-"""The fake model's lines for one enrichment run: search → fetch x2 → final record."""
+"""The fake model's lines for one enrichment run: search → fetch x2 → save → final record."""
 
 import json
 
@@ -36,6 +36,11 @@ ENRICH_SCRIPT: list[ScriptedReply] = [
                 id="call_3", name="fetch_page", args={"url": "https://news.example/acme-series-b"}
             ),
         ],
+    ),
+    ScriptedReply(
+        content="Both pages agree. Saving the record.",
+        stop_reason="tool_use",
+        tool_calls=[ToolCall(id="call_4", name="save_company", args=_FINAL_RECORD)],
     ),
     ScriptedReply(
         content=json.dumps(_FINAL_RECORD),

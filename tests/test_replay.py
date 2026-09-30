@@ -50,6 +50,8 @@ def tool_result(i: int, call_id: str, name: str = "fetch_page") -> dict[str, Any
     }
 
 
+FINAL_TURN = len(ENRICH_SCRIPT) - 1  # the reply that is the JSON record (end_turn)
+
 # rows 0-4 of a normal run: start, search turn, then the fetch x2 reply
 FIRST_FIVE = [
     started(0),
@@ -127,7 +129,7 @@ def test_rerun_tool_call_row_then_result_is_confirmed() -> None:
 
 
 def test_fake_model_picks_the_next_reply_after_replay() -> None:
-    # turn counting: the replayed conversation has 2 assistant turns -> reply #3 (the final JSON)
+    # turn counting: the replayed conversation has 2 assistant turns -> reply #3 (save_company)
     rows = [
         *FIRST_FIVE,
         tool_call(5, "call_2"),
@@ -138,15 +140,15 @@ def test_fake_model_picks_the_next_reply_after_replay() -> None:
     state = rebuild_messages(rows)
     reply = FakeLLMClient(ENRICH_SCRIPT).call("fake-planner", "", state.messages, [])
 
-    assert reply.stop_reason == "end_turn"
     assert reply.content == ENRICH_SCRIPT[2].content
+    assert [tc.name for tc in reply.tool_calls] == ["save_company"]
 
 
 def test_final_present_returns_the_record() -> None:
     record = {"name": "Acme Payments"}
     rows = [
         *FIRST_FIVE,
-        model_call(5, turn=2),
+        model_call(5, turn=FINAL_TURN),
         {"step_index": 6, "kind": "final", "payload": record},
     ]
     state = rebuild_messages(rows)
@@ -165,9 +167,9 @@ def test_error_present_marks_failed() -> None:
 
 def test_end_turn_reply_without_verdict_is_unjudged() -> None:
     # died after writing the final-looking model_call, before final/error
-    state = rebuild_messages([*FIRST_FIVE, model_call(5, turn=2)])
+    state = rebuild_messages([*FIRST_FIVE, model_call(5, turn=FINAL_TURN)])
 
-    assert state.unjudged_answer == ENRICH_SCRIPT[2].content
+    assert state.unjudged_answer == ENRICH_SCRIPT[FINAL_TURN].content
     assert state.pending_tool_calls == []
     assert state.turns_used == 3
     assert state.next_index == 6
