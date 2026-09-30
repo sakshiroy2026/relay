@@ -109,13 +109,14 @@ def run_once() -> bool:
 
     run_id = run["id"]
     domain = run["input"]["domain"]  # E
+    budget_usd = float(run["budget_usd"])  # NUMERIC column -> Decimal; money is a float estimate
     print(f"[{WORKER_ID}] claimed {run_id} (attempt {run['attempt_count']})", flush=True)
 
     def beat() -> bool:  # F — handed to the loop, called at the top of every turn
         return extend_lease(run_id)
 
     try:
-        result = run_agent(run_id, domain, WORKER_ID, beat)  # A
+        result = run_agent(run_id, domain, WORKER_ID, beat, budget_usd)  # A
     except LeaseLost as exc:  # D
         print(f"[{WORKER_ID}] lease_lost {str(run_id)[:8]}: {exc}", flush=True)
         return True

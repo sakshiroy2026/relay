@@ -165,6 +165,23 @@ def test_error_present_marks_failed() -> None:
     assert state.final is None
 
 
+def test_spent_is_the_sum_of_model_call_costs() -> None:
+    state = rebuild_messages(FIRST_FIVE)  # two model_call rows at 0.0005 each
+
+    assert state.spent_usd == pytest.approx(0.001)
+
+
+def test_budget_exceeded_present_marks_failed() -> None:
+    rows = [
+        *FIRST_FIVE,
+        {"step_index": 5, "kind": "budget_exceeded", "payload": {"spent_usd": 0.001}},
+    ]
+    state = rebuild_messages(rows)
+
+    assert state.failed
+    assert state.spent_usd == pytest.approx(0.001)
+
+
 def test_end_turn_reply_without_verdict_is_unjudged() -> None:
     # died after writing the final-looking model_call, before final/error
     state = rebuild_messages([*FIRST_FIVE, model_call(5, turn=FINAL_TURN)])

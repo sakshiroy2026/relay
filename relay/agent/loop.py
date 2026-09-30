@@ -5,17 +5,21 @@ WHAT IT IS  One run of the enrichment agent. Asks the model, runs the tools it
             Since Day 6 it starts by replaying the ledger, so a reclaimed run
             continues where the last worker stopped instead of starting over.
 GOES IN     run_id, the domain, this worker's id (stamped as `written_by`),
-            and a heartbeat function from the worker (False = lease lost).
+            a heartbeat function from the worker (False = lease lost), and the
+            run's budget_usd.
 COMES OUT   The validated company record as a dict, or None if the run
-            failed (the reason is in the last `error` step).
+            failed (the reason is in the last `error` / `budget_exceeded` step).
 TOUCHES     The steps table: one read (replay_ledger), then writes via
             append_step. `messages` is rebuilt from the ledger on every claim.
             Tools may write companies / tool_invocations; every tool call gets
-            an idempotency key '<run_id>:<tool_call_id>' (Day 7).
+            an idempotency key '<run_id>:<tool_call_id>' (Day 7). After each
+            model call, runs.spent_usd / tokens are refreshed from the ledger.
 FAILS WHEN  heartbeat() is False or a step index is taken -> LeaseLost is
             raised for the worker to handle. Model mistakes never raise: bad
             tool calls come back as ok=False observations; a bad final answer
-            or MAX_TURNS without one -> `error` step and None.
+            or MAX_TURNS without one -> `error` step and None. Spend already
+            at or over budget_usd before a model call -> `budget_exceeded`
+            step and None (one call can overshoot: its cost is only known after).
 """
 
 from collections.abc import Callable
@@ -29,6 +33,7 @@ from relay.agent.prompts import SYSTEM_PROMPT
 from relay.agent.schemas import CompanyRecord
 from relay.agent.tools import TOOL_SCHEMAS, ToolContext, dispatch_tool
 from relay.config import settings
+from relay.core.costs import refresh_run_totals
 from relay.core.ledger import LeaseLost, append_step
 from relay.core.replay import replay_ledger
 from relay.llm.client import ToolCall
@@ -98,6 +103,7 @@ def run_agent(
     domain: str,
     worker_id: str,
     heartbeat: Callable[[], bool],
+    budget_usd: float,
 ) -> dict[str, Any] | None:
     # --- SETUP: read the chart before doing anything ---
     # The user message is rebuilt from the run_started row; `domain` goes to the
@@ -108,11 +114,12 @@ def run_agent(
     # --- Resume edge cases: the run may already have a verdict ---
     if state.final is not None:  # died after `final`, before mark_succeeded
         return state.final
-    if state.failed:  # an `error` row is already written
+    if state.failed:  # an `error` / `budget_exceeded` row is already written
         return None
 
     messages = list(state.messages)
     index = state.next_index
+    spent = state.spent_usd  # from the ledger, so a resumed run keeps counting
 
     if state.unjudged_answer is not None:  # died after the last model_call, before judging it
         return _judge(run_id, index, state.unjudged_answer, worker_id)
@@ -126,6 +133,17 @@ def run_agent(
         if not heartbeat():
             raise LeaseLost(f"run {run_id}: lease lost before turn {turn}")
 
+        # --- Budget: never start a model call once the run has spent its budget ---
+        if spent >= budget_usd:
+            append_step(
+                run_id,
+                index,
+                "budget_exceeded",
+                {"spent_usd": round(spent, 6), "budget_usd": budget_usd},
+                worker_id,
+            )
+            return None
+
         # --- B: ask the model ---
         response = llm.call(
             model=settings.model_planner,
@@ -135,13 +153,16 @@ def run_agent(
         )
 
         # --- E: write the receipt BEFORE judging the reply ---
+        cost = price(response)
         index = append_step(
             run_id,
             index,
             "model_call",
-            {**asdict(response), "cost_usd": price(response)},
+            {**asdict(response), "cost_usd": cost},
             worker_id,
         )
+        spent += cost
+        refresh_run_totals(run_id)  # display copy on the runs row; the ledger stays the truth
 
         # --- J: the model must remember what it asked for ---
         messages.append(
