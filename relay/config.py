@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     model_planner: str = "fake-planner"
     model_cheap: str = "fake-cheap"
     tools_provider: Literal["fake"] = "fake"
+    fake_delay_seconds: float = 0.0  # Day 6: slow the fake model down so a run can be killed
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 

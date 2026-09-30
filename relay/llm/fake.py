@@ -1,4 +1,5 @@
 import json
+import time
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
@@ -22,8 +23,9 @@ def _estimate_tokens(obj: Any) -> int:
 class FakeLLMClient:
     """Scripted, deterministic stand-in for a real model. Costs $0."""
 
-    def __init__(self, script: list[ScriptedReply]) -> None:
+    def __init__(self, script: list[ScriptedReply], delay_seconds: float = 0.0) -> None:
         self._script = script
+        self._delay_seconds = delay_seconds  # stand-in for real model latency
 
     def call(
         self,
@@ -32,6 +34,9 @@ class FakeLLMClient:
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]],
     ) -> Response:
+        if self._delay_seconds > 0:
+            time.sleep(self._delay_seconds)
+
         # Which reply? Decided by the conversation, not by a counter —
         # so a fresh worker after a crash picks the same reply the old one would have.
         turn = sum(1 for m in messages if m.get("role") == "assistant")
