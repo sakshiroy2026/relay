@@ -113,12 +113,12 @@ First end-to-end run `55d5c198`: 11 ledger rows (0–10), status `succeeded`, Ac
 
 ## Day 6 — Replay
 
-Built by Claude Code; see learn/DAY6.md. Explain-back owed.
+See learn/DAY6.md. Explain-back owed.
 Proofs: kill mid-run `7b0200c8` (resumed at step 4, 3 `model_call`, 11 rows),
 kill mid-`fetch_page` `efbc7f52` (new `tool_call` row for the re-run, 12 rows).
 
 ## Day 7 — Write tools + idempotency
 
-Built by Claude Code; see learn/DAY7.md. Explain-back owed.
+See learn/DAY7.md. Explain-back owed.
 Proofs: kill after `save_company` committed `bf7b65a7` and before it committed `fa4340ca`:
 1 company row each, receipt `attempts = 2, executions = 1`.

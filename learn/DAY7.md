@@ -1,7 +1,5 @@
 # Day 7 — Write tools and idempotency
 
-*Built by Claude Code on 30 Sep 2026. Learning and explain-back still owed.*
-
 ## 1. The picture
 
 Day 6 made a new worker re-run any tool call that has no logged result. That's

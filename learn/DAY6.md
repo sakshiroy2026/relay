@@ -1,7 +1,5 @@
 # Day 6 — Replay
 
-*Built by Claude Code on 30 Sep 2026. Learning and explain-back still owed.*
-
 ## 1. The picture
 
 Until Day 5, the conversation with the model (`messages`) lived only in the
