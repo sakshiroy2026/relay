@@ -1,14 +1,16 @@
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel, Field
 
+from relay.api.auth import require_api_key
 from relay.config import settings
 from relay.db import pool
 
-router = APIRouter(prefix="/v1", tags=["runs"])
+# every route on this router needs the API key (safety slice)
+router = APIRouter(prefix="/v1", tags=["runs"], dependencies=[Depends(require_api_key)])
 
 AGENT_VERSION = "enrich@v2"  # v2 (Day 7): prompt lists the internal tools; saves before answering
 

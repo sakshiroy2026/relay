@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     database_url: str
     dev_tenant_id: str
     lease_seconds: int = 90
+    relay_api_key: str | None = None  # safety slice: unset -> /v1 refuses every request
     # ── LLM (Day 4) ─────────────────────────────────────────────
     llm_provider: Literal["fake", "anthropic"] = "fake"
     model_planner: str = "fake-planner"
