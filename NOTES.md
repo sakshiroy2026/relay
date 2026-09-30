@@ -110,3 +110,9 @@ First end-to-end run `55d5c198`: 11 ledger rows (0–10), status `succeeded`, Ac
 - Port 8000 is taken by another Python program → API on `--port 8001`.
 - A rebuild ends `logs -f` → restart it. Same worker ids after a rebuild = the edit wasn't saved.
 - `show_steps` takes the run id, not the worker id.
+
+## Day 6 — Replay
+
+Built by Claude Code; see learn/DAY6.md. Explain-back owed.
+Proofs: kill mid-run `7b0200c8` (resumed at step 4, 3 `model_call`, 11 rows),
+kill mid-`fetch_page` `efbc7f52` (new `tool_call` row for the re-run, 12 rows).
