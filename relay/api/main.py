@@ -1,10 +1,22 @@
-from fastapi import FastAPI, Response
+from pathlib import Path
 
-from relay.api.routes import runs
+from fastapi import FastAPI, Response
+from fastapi.responses import FileResponse
+
+from relay.api.routes import companies, runs
 from relay.db import pool
+
+STATIC_DIR = Path(__file__).parent / "static"
 
 app = FastAPI(title="Relay", version="0.1.0")
 app.include_router(runs.router)
+app.include_router(companies.router)
+
+
+@app.get("/", include_in_schema=False)
+def index() -> FileResponse:
+    # the demo page: static HTML, no key inside; it asks the viewer for one
+    return FileResponse(STATIC_DIR / "index.html", media_type="text/html")
 
 
 @app.get("/healthz")

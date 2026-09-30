@@ -54,3 +54,6 @@ check_untyped_defs = true
 
 [tool.setuptools.packages.find]
 include = ["relay*"]
+
+[tool.setuptools.package-data]
+relay = ["api/static/*.html"]  # the demo page travels with the package
