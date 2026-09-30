@@ -85,7 +85,7 @@ cap is per run, not per day.
 Unit tests: `tests/test_replay.py` adds "spent = sum of `model_call` costs" and
 "`budget_exceeded` present → failed" (12 tests pass).
 
-## 6. Questions for Yamini
+## 6. Questions for Sakshi Roy
 
 1. Why does the API answer 503, not 200, when `RELAY_API_KEY` isn't set?
 2. Why `hmac.compare_digest` instead of `==`?

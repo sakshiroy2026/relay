@@ -73,7 +73,7 @@ created for the test (and deleted after).
 5. Wait ~15–20 s for the takeover banner, then the final record.
 6. Afterwards remove the `FAKE_DELAY_SECONDS=5` line from `.env`, rebuild, and `docker compose stop worker`.
 
-## 7. Questions for Yamini
+## 7. Questions for Sakshi Roy
 
 1. Why does the page poll instead of the server pushing updates?
 2. Why is the API key never written into `index.html`?

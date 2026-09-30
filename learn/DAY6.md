@@ -124,7 +124,7 @@ during these tests. `docker compose logs` times and `steps.created_at` times
 don't line up. The lease uses only the database's `now()`, so this doesn't
 affect correctness.
 
-## 6. Questions for Yamini
+## 6. Questions for Sakshi Roy
 
 1. Why does a `tool_call` row never become a message?
 2. The worker dies right after writing row 4 (`model_call` asking for two
