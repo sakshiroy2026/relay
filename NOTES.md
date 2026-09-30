@@ -122,3 +122,9 @@ kill mid-`fetch_page` `efbc7f52` (new `tool_call` row for the re-run, 12 rows).
 See learn/DAY7.md. Explain-back owed.
 Proofs: kill after `save_company` committed `bf7b65a7` and before it committed `fa4340ca`:
 1 company row each, receipt `attempts = 2, executions = 1`.
+
+## Safety slice — API key + budget cap
+
+See learn/SAFETY.md. Explain-back owed.
+Proofs: 401 without / with a wrong key, 202 with the key; budget run `e8280abe`
+(1 `model_call`, then `budget_exceeded`, `failed`).
