@@ -6,6 +6,10 @@ An agent run must survive the worker process being killed at any moment, resume 
 
 Instead of an agent loop living in a process that dies when the process dies, every model call and every tool invocation is appended to a write-ahead ledger in PostgreSQL. If a worker crashes, is deployed over, or hits a rate limit, another worker picks the run up and continues from the exact step where it stopped — without re-issuing model calls already paid for, and without re-executing side effects already applied.
 
+![Demo page: worker 20a728 was killed after step 3; worker 0f4d83 took over at step 4 and finished the run](learn/img/frontend-takeover.jpg)
+
+*The demo page during run `783a03b3`: the worker that owned the run was killed with `docker kill` after step 3; another worker replayed the ledger and continued at step 4.*
+
 ---
 
 ## Status
@@ -22,9 +26,9 @@ Instead of an agent loop living in a process that dies when the process dies, ev
 | Transcript replay after a crash | ✅ working, verified with `docker kill` mid-run (evidence below) |
 | Idempotent write tools (per-tool key + unique constraint) | ✅ working, verified with `docker kill` inside `save_company` (evidence below) |
 | API key check, per-run budget cap | ✅ working (evidence below) |
-| Live demo page | 🔨 next |
+| Live demo page (`GET /`, polls the ledger once a second) | ✅ working, kill-and-resume shown live (screenshot above) |
+| Chaos harness and measured results | 🔨 next |
 | Public deployment | ⬜ planned |
-| Chaos harness and measured results | ⬜ planned |
 
 No measured reliability or accuracy numbers are published yet. They will appear here when the chaos harness and eval suite have actually produced them.
 
@@ -120,6 +124,8 @@ Manual tests against three worker containers and PostgreSQL on Neon. Run ids are
 
 **Per-run budget** — run `e8280abe`, created with a budget of $0.0001 (below the cost of one fake model call, $0.004881): the first model call ran, the next turn's check wrote a `budget_exceeded` step, and the run ended `failed` with exactly one `model_call` in its ledger. Spend is summed from the ledger's `model_call` rows, so the cap survives crashes and replays; it can overshoot by at most one call, whose cost is only known after it returns. A normal run (`272f1414`) costs $0.026 in fake prices against the default $0.25.
 
+**Live demo page** — run `783a03b3`, started from the page at `GET /`: worker `20a728` wrote steps 1–3, was killed with the `docker kill` command the page displays, and worker `0f4d83` took over at step 4 (attempt 2). The page showed the takeover banner, the per-worker badges, the final record and the saved company row. The page is one static HTML file polling `GET /v1/runs/{id}` and `GET /v1/runs/{id}/steps` once a second; it holds no API key and renders ledger text as plain text only.
+
 `scripts/check_run.py` checks every run above for index gaps and repeated model calls. The "already finished" and "already failed" replay paths are covered by unit tests (`tests/test_replay.py`) but haven't been hit live.
 
 **Crash recovery (placeholder workload, before the agent loop)** — run `01ab701a`: worker-3 wrote steps 1–5, then `docker kill` (exit 137). Worker-1 claimed the run at attempt 2 once the lease expired, resumed at step 6, and finished. Ledger 0–6, no gaps, no repeated steps.
@@ -159,6 +165,6 @@ Planned: Redis, OpenTelemetry, Prometheus, Grafana, Caddy, AWS EC2.
 
 ## Roadmap
 
-Next, in order: a one-page live demo view; public deployment; then the chaos harness and a hand-labelled golden dataset with LLM-as-judge evaluation gated in CI.
+Next, in order: the chaos harness (measured crash-recovery numbers); public deployment; then a hand-labelled golden dataset with LLM-as-judge evaluation gated in CI.
 
 Later: SSRF hardening on the page-fetch tool, per-tool circuit breakers, a schema-repair ladder with model escalation, and OpenTelemetry GenAI tracing.

@@ -128,3 +128,9 @@ Proofs: kill after `save_company` committed `bf7b65a7` and before it committed `
 See learn/SAFETY.md. Explain-back owed.
 Proofs: 401 without / with a wrong key, 202 with the key; budget run `e8280abe`
 (1 `model_call`, then `budget_exceeded`, `failed`).
+
+## Demo page
+
+See learn/FRONTEND.md. Explain-back owed.
+Proof: run `783a03b3` started from the page, owner killed after step 3, takeover banner
+at step 4, succeeded (screenshot `learn/img/frontend-takeover.jpg`).
