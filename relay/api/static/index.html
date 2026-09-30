@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Relay — live run</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --ink: #1c2330; --muted: #667085; --line: #e3e7ee;
+    --accent: #2f6fed; --ok: #13804b; --bad: #c2352b; --warn-bg: #fff4d6; --warn-ink: #7a4d00;
+    --chip: #eef1f6; --mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f131a; --panel: #171c25; --ink: #e6e9ef; --muted: #98a2b3; --line: #273041;
+      --accent: #6c9bff; --ok: #3ccf87; --bad: #ff6b5f; --warn-bg: #3a2e10; --warn-ink: #ffd27a;
+      --chip: #222a37;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center;
+           padding: 16px 24px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  header h1 { margin: 0; font-size: 20px; letter-spacing: .2px; }
+  header .tag { color: var(--muted); font-size: 13px; }
+  header .key { margin-left: auto; display: flex; gap: 8px; align-items: center; font-size: 13px; }
+  main { max-width: 1180px; margin: 0 auto; padding: 20px 16px 48px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+  input, button { font: inherit; border-radius: 8px; border: 1px solid var(--line);
+                  background: var(--panel); color: var(--ink); padding: 8px 10px; }
+  input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  button { cursor: pointer; background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  button.ghost { background: transparent; color: var(--muted); border-color: var(--line); font-weight: 500; }
+  button:disabled { opacity: .5; cursor: default; }
+  .start { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px; }
+  .start input[name=domain] { flex: 1 1 260px; }
+  .msg { color: var(--bad); font-size: 13px; min-height: 18px; margin: -8px 0 12px; }
+  .runhead { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 12px; }
+  .stat .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .6px; }
+  .stat .value { font-size: 18px; font-weight: 600; margin-top: 2px; overflow-wrap: anywhere; }
+  .pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 14px; font-weight: 600; background: var(--chip); }
+  .pill.succeeded { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
+  .pill.failed, .pill.dead { background: color-mix(in srgb, var(--bad) 18%, transparent); color: var(--bad); }
+  .pill.running { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
+  .bar { height: 6px; border-radius: 3px; background: var(--chip); margin-top: 6px; overflow: hidden; }
+  .bar > div { height: 100%; background: var(--accent); width: 0; transition: width .4s; }
+  .banner { display: none; margin-bottom: 12px; padding: 12px 14px; border-radius: 10px;
+            background: var(--warn-bg); color: var(--warn-ink); font-weight: 600; }
+  .banner small { display: block; font-weight: 400; margin-top: 2px; }
+  .killhint { display: none; margin-bottom: 12px; font-size: 13px; color: var(--muted); }
+  .killhint code { font-family: var(--mono); background: var(--chip); padding: 2px 6px; border-radius: 6px; color: var(--ink); }
+  .grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 16px; }
+  @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } header .key { margin-left: 0; } }
+  h2 { font-size: 14px; margin: 0 0 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; }
+  ol.steps { list-style: none; margin: 0; padding: 0; }
+  ol.steps li { display: grid; grid-template-columns: 34px 104px 88px 1fr; gap: 8px; align-items: baseline;
+                padding: 7px 4px; border-top: 1px solid var(--line); animation: arrive .5s ease; }
+  ol.steps li.takeover { border-top: 2px solid var(--warn-ink); }
+  @keyframes arrive { from { background: color-mix(in srgb, var(--accent) 16%, transparent); } to { background: transparent; } }
+  .idx { font-family: var(--mono); color: var(--muted); text-align: right; }
+  .kind { font-family: var(--mono); font-size: 12px; padding: 1px 6px; border-radius: 6px; background: var(--chip); justify-self: start; }
+  .kind.model_call { color: var(--accent); }
+  .kind.final { color: var(--ok); }
+  .kind.error, .kind.budget_exceeded { color: var(--bad); }
+  .who { font-family: var(--mono); font-size: 12px; padding: 1px 6px; border-radius: 6px; color: #fff; justify-self: start; }
+  .sum { font-size: 13px; overflow-wrap: anywhere; }
+  .sum .t { color: var(--muted); font-family: var(--mono); font-size: 12px; margin-right: 6px; }
+  pre { margin: 0; font-family: var(--mono); font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .side .panel + .panel { margin-top: 16px; }
+  .empty { color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Relay</h1>
+  <span class="tag">durable agent runs · every step written to a Postgres ledger</span>
+  <label class="key">API key
+    <input id="key" type="password" autocomplete="off" placeholder="rly_…" size="22">
+    <button id="forget" class="ghost" type="button">forget</button>
+  </label>
+</header>
+
+<main>
+  <form class="start" id="startForm">
+    <input name="domain" id="domain" placeholder="company domain, e.g. razorpay.com" required minlength="3">
+    <button id="startBtn" type="submit">Start run</button>
+    <input id="openId" placeholder="or open a run id" size="24">
+    <button id="openBtn" class="ghost" type="button">open</button>
+  </form>
+  <div class="msg" id="msg"></div>
+
+  <section class="panel runhead" id="runhead" hidden>
+    <div class="stat"><div class="label">Run</div><div class="value" id="rId">—</div></div>
+    <div class="stat"><div class="label">Status</div><div class="value"><span class="pill" id="rStatus">—</span></div></div>
+    <div class="stat"><div class="label">Attempt</div><div class="value" id="rAttempt">—</div></div>
+    <div class="stat"><div class="label">Cost so far</div><div class="value" id="rCost">—</div><div class="bar"><div id="rBar"></div></div></div>
+    <div class="stat"><div class="label">Owner now</div><div class="value" id="rOwner">—</div></div>
+  </section>
+
+  <div class="banner" id="banner"></div>
+  <div class="killhint" id="killhint">To test a crash, kill the worker that owns this run: <code id="killcmd"></code></div>
+
+  <div class="grid">
+    <section class="panel">
+      <h2>Ledger (steps table, live)</h2>
+      <ol class="steps" id="steps"></ol>
+      <p class="empty" id="noSteps">Start a run to see its steps arrive.</p>
+    </section>
+    <aside class="side">
+      <section class="panel"><h2>Final record</h2><pre id="final" class="empty">—</pre></section>
+      <section class="panel"><h2>Saved company row</h2><pre id="company" class="empty">—</pre></section>
+    </aside>
+  </div>
+</main>
+
+<script>
+"use strict";
+// The API key lives in page memory; localStorage only as a convenience (may be unavailable).
+const $ = (id) => document.getElementById(id);
+const KEY_STORE = "relay.apiKey";
+const PALETTE = ["#0f8b8d", "#d9730d", "#7b4bd6", "#c2185b", "#2e7d32", "#5d6d7e"];
+const TERMINAL = new Set(["succeeded", "failed", "dead"]);
+
+let runId = null, timer = null, shownSteps = 0, companyShown = false;
+let workerColors = new Map();
+
+function loadKey() { try { return localStorage.getItem(KEY_STORE) || ""; } catch { return ""; } }
+function saveKey(v) { try { v ? localStorage.setItem(KEY_STORE, v) : localStorage.removeItem(KEY_STORE); } catch {} }
+$("key").value = loadKey();
+$("key").addEventListener("change", () => saveKey($("key").value.trim()));
+$("forget").addEventListener("click", () => { $("key").value = ""; saveKey(""); });
+
+function say(text) { $("msg").textContent = text || ""; }
+function shortWorker(w) { return w === "api" ? "api" : w.split(":")[0].slice(0, 6); }
+function colorFor(w) {
+  if (w === "api") return "#8a94a6";
+  if (!workerColors.has(w)) workerColors.set(w, PALETTE[workerColors.size % PALETTE.length]);
+  return workerColors.get(w);
+}
+
+async function api(path, options = {}) {
+  const key = $("key").value.trim();
+  const res = await fetch(path, {
+    ...options,
+    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + key, ...(options.headers || {}) },
+  });
+  if (res.status === 401) throw new Error("API key missing or wrong: paste it in the box at the top right.");
+  if (res.status === 503) throw new Error("The server has no API key configured.");
+  if (!res.ok) { const e = new Error(`${res.status} ${res.statusText}`); e.status = res.status; throw e; }
+  return res.json();
+}
+
+function reset(id) {
+  clearTimeout(timer);
+  runId = id; shownSteps = 0; companyShown = false; workerColors = new Map();
+  $("steps").replaceChildren();
+  $("noSteps").hidden = false;
+  $("banner").style.display = "none"; $("banner").replaceChildren();
+  $("final").textContent = "—"; $("final").className = "empty";
+  $("company").textContent = "—"; $("company").className = "empty";
+  $("runhead").hidden = false;
+  try { history.replaceState(null, "", "#run=" + id); } catch {}
+}
+
+$("startForm").addEventListener("submit", async (ev) => {
+  ev.preventDefault(); say("");
+  $("startBtn").disabled = true;
+  try {
+    const out = await api("/v1/runs", { method: "POST", body: JSON.stringify({ domain: $("domain").value.trim() }) });
+    reset(out.run_id);
+    poll();
+  } catch (e) { say(e.message); }
+  finally { $("startBtn").disabled = false; }
+});
+$("openBtn").addEventListener("click", () => {
+  const id = $("openId").value.trim();
+  if (id) { say(""); reset(id); poll(); }
+});
+
+function renderRun(run) {
+  $("rId").textContent = String(run.id).slice(0, 8);
+  $("rStatus").textContent = run.status;
+  $("rStatus").className = "pill " + run.status;
+  $("rAttempt").textContent = run.attempt_count;
+  const spent = Number(run.spent_usd), budget = Number(run.budget_usd);
+  $("rCost").textContent = `$${spent.toFixed(4)} of $${budget.toFixed(2)}`;
+  $("rBar").style.width = Math.min(100, budget > 0 ? (spent / budget) * 100 : 0) + "%";
+  const owner = run.lease_owner ? shortWorker(run.lease_owner) : "—";
+  $("rOwner").textContent = owner;
+  const running = run.status === "running" && run.lease_owner;
+  $("killhint").style.display = running ? "block" : "none";
+  if (running) $("killcmd").textContent = "docker kill " + run.lease_owner.split(":")[0];
+  if (run.result && $("final").className === "empty") {
+    $("final").textContent = JSON.stringify(run.result, null, 2); $("final").className = "";
+  }
+}
+
+function renderSteps(steps) {
+  // takeovers: every time the writer changes between two worker-written steps
+  const takeovers = [];
+  let prev = null;
+  for (const s of steps) {
+    if (s.written_by === "api") continue;
+    if (prev && s.written_by !== prev.written_by) takeovers.push({ at: s.step_index, from: prev.written_by, to: s.written_by });
+    prev = s;
+  }
+  const takeoverAt = new Set(takeovers.map((t) => t.at));
+
+  for (const s of steps.slice(shownSteps)) {
+    const li = document.createElement("li");
+    if (takeoverAt.has(s.step_index)) li.className = "takeover";
+    const idx = document.createElement("span"); idx.className = "idx"; idx.textContent = s.step_index;
+    const kind = document.createElement("span"); kind.className = "kind " + s.kind; kind.textContent = s.kind;
+    const who = document.createElement("span"); who.className = "who";
+    who.textContent = shortWorker(s.written_by); who.style.background = colorFor(s.written_by);
+    const sum = document.createElement("span"); sum.className = "sum";
+    const t = document.createElement("span"); t.className = "t"; t.textContent = new Date(s.created_at).toLocaleTimeString();
+    sum.append(t, document.createTextNode(s.summary));
+    li.append(idx, kind, who, sum);
+    $("steps").append(li);
+  }
+  shownSteps = steps.length;
+  $("noSteps").hidden = steps.length > 0;
+
+  if (takeovers.length) {
+    const b = $("banner"); b.replaceChildren();
+    for (const t of takeovers) {
+      const line = document.createElement("div");
+      line.textContent = `Worker ${shortWorker(t.to)} took over at step ${t.at} — resumed, not restarted`;
+      const small = document.createElement("small");
+      small.textContent = `worker ${shortWorker(t.from)} stopped after step ${t.at - 1}; the new worker replayed the ledger and continued`;
+      line.append(small); b.append(line);
+    }
+    b.style.display = "block";
+  }
+}
+
+async function showCompany(domain) {
+  try {
+    const c = await api("/v1/companies/" + encodeURIComponent(domain));
+    $("company").textContent = JSON.stringify(c, null, 2); $("company").className = "";
+  } catch (e) {
+    $("company").textContent = e.status === 404 ? "no company row saved for " + domain : e.message;
+  }
+  companyShown = true;
+}
+
+async function poll() {
+  const id = runId;
+  try {
+    const [run, steps] = await Promise.all([api(`/v1/runs/${id}`), api(`/v1/runs/${id}/steps`)]);
+    if (id !== runId) return;               // a newer run was started meanwhile
+    renderRun(run); renderSteps(steps);
+    if (TERMINAL.has(run.status)) {
+      if (!companyShown) await showCompany(run.input.domain);
+      return;                               // finished: stop polling
+    }
+  } catch (e) {
+    say(e.status === 404 ? "No such run." : e.message);
+    if (e.status === 404) return;
+  }
+  timer = setTimeout(poll, 1000);           // polling, not SSE: the decided simple version
+}
+
+// reopen the run in the URL (#run=<id>) after a page refresh
+const m = location.hash.match(/run=([0-9a-f-]{36})/);
+if (m) { reset(m[1]); poll(); }
+</script>
+</body>
+</html>
