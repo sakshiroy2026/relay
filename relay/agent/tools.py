@@ -25,6 +25,7 @@ from psycopg.types.json import Jsonb
 from pydantic import BaseModel, Field, HttpUrl, ValidationError
 
 from relay.agent.schemas import CompanyRecord, PageText, SearchResult
+from relay.agent.ssrf import UnsafeURL, check_url
 from relay.config import settings
 from relay.core.idempotency import run_once
 from relay.db import pool
@@ -106,6 +107,12 @@ def _fake_web_search(args: WebSearchInput, _ctx: ToolContext | None) -> str:
 
 
 def _fake_fetch_page(args: FetchPageInput, _ctx: ToolContext | None) -> str:
+    try:
+        # fake mode: .example hosts don't resolve, so only the checks that need no DNS;
+        # the real fetcher calls check_url with DNS, and next_hop on every redirect
+        check_url(str(args.url), resolve=None)
+    except UnsafeURL as exc:
+        raise ToolError(str(exc)) from exc
     page = _FAKE_PAGES.get(str(args.url))
     if page is None:
         raise ToolError(f"could not fetch {args.url}: 404 not found")

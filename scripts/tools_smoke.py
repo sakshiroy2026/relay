@@ -4,6 +4,8 @@ CASES = [
     ("web_search", {"query": "Acme Payments"}),
     ("fetch_page", {"url": "https://acmepay.example/careers"}),
     ("fetch_page", {"url": "not a url"}),
+    ("fetch_page", {"url": "https://acmepay.example/about"}),
+    ("fetch_page", {"url": "http://169.254.169.254/latest/meta-data/"}),  # SSRF: blocked
     ("send_email", {"to": "someone@example.com"}),
 ]
 
