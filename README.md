@@ -27,6 +27,7 @@ Instead of an agent loop living in a process that dies when the process dies, ev
 | Idempotent write tools (per-tool key + unique constraint) | ✅ working, verified with `docker kill` inside `save_company` (evidence below) |
 | API key check, per-run budget cap | ✅ working (evidence below) |
 | Live demo page (`GET /`, polls the ledger once a second) | ✅ working, kill-and-resume shown live (screenshot above) |
+| SSRF guard on `fetch_page` (https only, resolved IPs must be public, redirects re-checked, max 3) | ✅ unit-tested (24 cases); DNS checks go live with the real fetcher |
 | Chaos harness and measured results | ✅ 200 runs (results below) |
 | Real model provider | 🔨 next (everything so far runs on a scripted fake model) |
 | Public deployment | ⬜ planned |
@@ -191,4 +192,4 @@ Currently implements durable execution, lease-based claiming with fencing, trans
 
 Next, in order: the switch from the fake model to a real provider (with real search and page fetch); public deployment; then a hand-labelled golden dataset with LLM-as-judge evaluation gated in CI.
 
-Later: SSRF hardening on the page-fetch tool, per-tool circuit breakers, a schema-repair ladder with model escalation, and OpenTelemetry GenAI tracing.
+Later: per-tool circuit breakers, a schema-repair ladder with model escalation, and OpenTelemetry GenAI tracing.
