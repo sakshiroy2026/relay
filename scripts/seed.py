@@ -1,3 +1,4 @@
+import argparse
 import secrets
 
 import bcrypt
@@ -23,15 +24,19 @@ def create_api_key(cur, tenant_id: str) -> str:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Create a tenant (default 'dev') and its API key")
+    parser.add_argument("--tenant", default="dev", help="tenant name (Day 10: second tenants too)")
+    args = parser.parse_args()
+
     with pool.connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT id FROM tenants WHERE name = %s", ("dev",))
+            cur.execute("SELECT id FROM tenants WHERE name = %s", (args.tenant,))
             row = cur.fetchone()
 
             if row is None:
                 cur.execute(
                     "INSERT INTO tenants (name) VALUES (%s) RETURNING id",
-                    ("dev",),
+                    (args.tenant,),
                 )
                 row = cur.fetchone()
                 if row is None:
@@ -55,7 +60,7 @@ def main() -> None:
             else:
                 full_key = create_api_key(cur, tenant_id)
 
-    print(f"DEV_TENANT_ID={tenant_id}")
+    print(f"tenant {args.tenant!r}: id {tenant_id}")
     if full_key:
         print(f"RELAY_API_KEY={full_key}")
         print("^^ save this in .env now — it cannot be recovered")

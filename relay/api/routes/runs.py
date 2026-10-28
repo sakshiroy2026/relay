@@ -1,20 +1,24 @@
 import json
-from typing import Any
+from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
-from psycopg.rows import dict_row
-from psycopg.types.json import Jsonb
 from pydantic import BaseModel, Field
 
-from relay.api.auth import require_api_key
-from relay.config import settings
-from relay.db import pool
+from relay.api import ratelimit, repo
+from relay.api.principal import Principal, require_principal
 
-# every route on this router needs the API key (safety slice)
-router = APIRouter(prefix="/v1", tags=["runs"], dependencies=[Depends(require_api_key)])
 
-AGENT_VERSION = "enrich@v2"  # v2 (Day 7): prompt lists the internal tools; saves before answering
+def guarded(principal: Annotated[Principal, Depends(require_principal)]) -> Principal:
+    """Auth, then the tenant's rate limit — the dependency every /v1 route shares."""
+    ratelimit.check(principal)
+    return principal
+
+
+# every route on this router authenticates and is rate-limited (Day 10)
+router = APIRouter(prefix="/v1", tags=["runs"])
+
+Caller = Annotated[Principal, Depends(guarded)]
 
 
 class CreateRunRequest(BaseModel):
@@ -27,59 +31,30 @@ class CreateRunResponse(BaseModel):
 
 
 @router.post("/runs", status_code=202, response_model=CreateRunResponse)
-def create_run(body: CreateRunRequest) -> CreateRunResponse:
-    payload = {"domain": body.domain}
-
-    with pool.connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO runs (tenant_id, input, agent_version)
-                VALUES (%s, %s, %s)
-                RETURNING id, status
-                """,
-                (settings.dev_tenant_id, Jsonb(payload), AGENT_VERSION),
-            )
-            row = cur.fetchone()
-            if row is None:
-                raise HTTPException(status_code=500, detail="run insert returned no row")
-            run_id, status = row
-
-            cur.execute(
-                """
-                INSERT INTO steps (run_id, step_index, kind, payload, written_by)
-                VALUES (%s, %s, 'run_started', %s, %s)
-                """,
-                (run_id, 0, Jsonb(payload), "api"),
-            )
-
-    return CreateRunResponse(run_id=run_id, status=status)
+def create_run(body: CreateRunRequest, principal: Caller) -> CreateRunResponse:
+    try:
+        created = repo.create_run(principal.tenant_id, body.domain, principal.max_concurrent_runs)
+    except repo.ConcurrencyLimit as exc:
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                f"too many open runs: {exc.open_runs} pending/running, "
+                f"cap {exc.cap}; wait for runs to finish"
+            ),
+            headers={"Retry-After": "5"},
+        ) from exc
+    return CreateRunResponse(run_id=created["run_id"], status=created["status"])
 
 
 @router.get("/runs/{run_id}")
-def get_run(run_id: UUID) -> dict:
-    with pool.connection() as conn:
-        with conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(
-                """
-                SELECT id, status, input, result, error,
-                       attempt_count, next_step_index, lease_owner,
-                       spent_usd, budget_usd, tokens_in, tokens_out,
-                       agent_version, created_at, started_at, finished_at
-                FROM runs
-                WHERE id = %s AND tenant_id = %s
-                """,
-                (run_id, settings.dev_tenant_id),
-            )
-            row = cur.fetchone()
-
-            if row is None:
-                raise HTTPException(status_code=404, detail="run not found")
-
+def get_run(run_id: UUID, principal: Caller) -> dict:
+    row = repo.get_run(principal.tenant_id, run_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="run not found")
     return row
 
 
-# ── read-only ledger view for the demo page (Stage 4) ────────────────────
+# ── read-only ledger view for the demo page ───────────────────────────────
 SUMMARY_CHARS = 140  # page texts are long; the page only needs a glance
 
 
@@ -107,25 +82,16 @@ def summarize_step(kind: str, p: dict[str, Any]) -> str:
         return f"error: {p.get('reason')}"
     if kind == "budget_exceeded":
         return f"budget exceeded: spent ${p.get('spent_usd')} of ${p.get('budget_usd')}"
+    if kind == "repair_requested":
+        return "final answer failed validation; asked the model to correct it"
+    if kind == "requeued":
+        return f"requeued by {p.get('requeued_by', 'an operator')} (was {p.get('from_status')})"
     return kind
 
 
 @router.get("/runs/{run_id}/steps")
-def get_run_steps(run_id: UUID) -> list[dict[str, Any]]:
-    with pool.connection() as conn:
-        with conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(
-                """
-                SELECT s.step_index, s.kind, s.written_by, s.created_at, s.payload
-                FROM steps s
-                JOIN runs r ON r.id = s.run_id
-                WHERE s.run_id = %s AND r.tenant_id = %s
-                ORDER BY s.step_index
-                """,
-                (run_id, settings.dev_tenant_id),
-            )
-            rows = cur.fetchall()
-
+def get_run_steps(run_id: UUID, principal: Caller) -> list[dict[str, Any]]:
+    rows = repo.get_run_steps(principal.tenant_id, run_id)
     return [
         {
             "step_index": r["step_index"],

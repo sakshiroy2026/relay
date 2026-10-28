@@ -26,6 +26,7 @@ Instead of an agent loop living in a process that dies when the process dies, ev
 | Transcript replay after a crash | ✅ working, verified with `docker kill` mid-run (evidence below) |
 | Idempotent write tools (per-tool key + unique constraint) | ✅ working, verified with `docker kill` inside `save_company` (evidence below) |
 | API key check, per-run budget cap | ✅ working (evidence below) |
+| Full API keys (prefix + bcrypt, 60 s verification cache), tenant scoping in a repository layer, per-tenant rate limit + concurrency cap | ✅ tested live + 7 tests (evidence below) |
 | Live demo page (`GET /`, polls the ledger once a second) | ✅ working, kill-and-resume shown live (screenshot above) |
 | SSRF guard on `fetch_page` (https only, resolved IPs must be public, redirects re-checked, max 3) | ✅ unit-tested (24 cases); DNS checks go live with the real fetcher |
 | Retries with jittered backoff + per-tool circuit breaker (shared state in Postgres) | ✅ unit-tested (21 cases) + fault-injection runs (results below) |
@@ -192,6 +193,8 @@ Manual tests against three worker containers and PostgreSQL on Neon. Run ids are
 
 **API key** — every `/v1` route requires `Authorization: Bearer <key>`, compared in constant time. Without a key, with a wrong key, or without the `Bearer` scheme: `401`. With the key: `202`. `/healthz` stays open. If the server has no key configured, `/v1` answers `503` instead of running open.
 
+**Full API keys + tenancy (Day 10)** — keys are `rly_<prefix>.<secret>`: indexed prefix lookup in `api_keys`, bcrypt check of the secret, and the caller becomes a tenant whose id scopes every query (a repository layer makes the tenant id a required argument). Verified keys are cached 60 s as SHA-256 digests — measured live: first request 294 ms (bcrypt), second 7 ms. The single env key still works and maps to the dev tenant. Another tenant's run answers `404`, not `403`. Per-tenant limits (migration 005): requests/minute → `429` with Retry-After, and a max on concurrent runs enforced in Postgres under a per-tenant advisory lock — 8 racing creates against a cap of 3 produced exactly 3 runs (`tests/test_api_auth_tenancy.py`). Method and trade-offs (revocation lag, in-process rate window): [`learn/DAY10.md`](learn/DAY10.md).
+
 **Per-run budget** — run `e8280abe`, created with a budget of $0.0001 (below the cost of one fake model call, $0.004881): the first model call ran, the next turn's check wrote a `budget_exceeded` step, and the run ended `failed` with exactly one `model_call` in its ledger. Spend is summed from the ledger's `model_call` rows, so the cap survives crashes and replays; it can overshoot by at most one call, whose cost is only known after it returns. A normal run (`272f1414`) costs $0.026 in fake prices against the default $0.25.
 
 **Live demo page** — run `783a03b3`, started from the page at `GET /`: worker `20a728` wrote steps 1–3, was killed with the `docker kill` command the page displays, and worker `0f4d83` took over at step 4 (attempt 2). The page showed the takeover banner, the per-worker badges, the final record and the saved company row. The page is one static HTML file polling `GET /v1/runs/{id}` and `GET /v1/runs/{id}/steps` once a second; it holds no API key and renders ledger text as plain text only.
@@ -235,7 +238,7 @@ Planned: Redis, OpenTelemetry, Prometheus, Grafana, Caddy, AWS EC2.
 
 ## Roadmap
 
-Currently implements durable execution, lease-based claiming with fencing, transcript replay, tool-level idempotency with a database backstop, an API key and per-run budget, a live demo page, and measured chaos-harness results.
+Currently implements durable execution, lease-based claiming with fencing, transcript replay, tool-level idempotency with a database backstop, full per-tenant API keys with rate and concurrency limits, a per-run budget, a repair ladder and dead-letter queue, a live demo page, and measured chaos-harness results.
 
 Next, in order: the switch from the fake model to a real provider (with real search and page fetch); public deployment; then a hand-labelled golden dataset with LLM-as-judge evaluation gated in CI.
 

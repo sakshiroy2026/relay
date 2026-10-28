@@ -184,3 +184,15 @@ then flips to pending with max_attempts = attempts + 5 — so requeued runs RESU
 24/24 model-outage failures requeued and finished without re-paying pre-outage
 calls; 5/5 kill-9-until-exhausted runs reaped, requeued, succeeded.
 Numbers: chaos/repair_dlq_results.json (local Postgres, not Neon). 20 new tests (92).
+
+## Day 10 — Full API keys, tenant scoping, rate limits
+
+Built by Claude Code; see learn/DAY10.md. Explain-back owed.
+Keys are rly_<prefix>.<secret>: indexed prefix lookup, bcrypt check, Principal
+(tenant + limits); verified keys cached 60 s as SHA-256 digests (294 ms cold ->
+7 ms cached, measured). Env key still works -> dev tenant. All API SQL moved to
+a repository layer where tenant_id is a required argument; cross-tenant reads
+404 (not 403). Migration 005: per-tenant requests_per_minute (in-process window,
+429) and max_concurrent_runs (Postgres advisory lock + count: 8 racing creates
+vs cap 3 -> exactly 3 rows). relay/api/auth.py deleted; seed.py --tenant NAME.
+7 new tests (99 total).
