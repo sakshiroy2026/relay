@@ -44,6 +44,8 @@ Instead of an agent loop living in a process that dies when the process dies, ev
 | SSE for the demo page (LISTEN/NOTIFY push, fetch-streaming, polling fallback) | ✅ median 3.7 ms push latency, browser-tested, 5 tests |
 | Dead-letter queue (reaper for exhausted runs, `requeued` ledger marker, operator CLI) | ✅ measured: requeued runs resume from their ledger, 0 restarts (results below) |
 | Real model provider (Claude Haiku 5.5 via the official SDK; raw reply blocks replayed verbatim so thinking signatures stay valid across crashes; per-tenant `demo`/`live` mode) | ✅ built and tested through the SDK with a mock transport ($0); first paid run pending the key (details: [`learn/P1_REAL_MODEL.md`](learn/P1_REAL_MODEL.md)) |
+| Eval harness: field scoring vs a hand-labelled golden set, Sonnet 5.5 judge for `industry`, accuracy + precision (flagging = abstaining), CI gate on committed live results | ✅ built, 16 tests, demo eval run; real numbers need the Day 18 labels (details: [`learn/P6_EVAL.md`](learn/P6_EVAL.md)) |
+| CI (GitHub Actions: ruff, mypy, all tests on Postgres 16, eval gate; no secrets, no paid calls) | ✅ added |
 | Public deployment | ⬜ planned |
 
 ---

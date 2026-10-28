@@ -1,0 +1,41 @@
+# Every push and PR: lint, types, the full test suite against a real Postgres,
+# and the eval gate. $0 by design: no step calls a paid API (the model and the
+# web are stubbed in tests; the eval gate only reads committed results), so CI
+# needs no secrets.
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: relay
+          POSTGRES_PASSWORD: relay
+          POSTGRES_DB: relay
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U relay"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://relay:relay@localhost:5432/relay
+      DEV_TENANT_ID: 00000000-0000-0000-0000-000000000001
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install -e ".[dev]" cryptography
+      - run: alembic upgrade head
+      - run: psql "$DATABASE_URL" -c "INSERT INTO tenants (id, name) VALUES ('$DEV_TENANT_ID', 'dev')"
+      - run: ruff format --check .
+      - run: ruff check .
+      - run: python -m mypy --explicit-package-bases relay/ chaos/ scripts/ tests/ evals/
+      - run: python -m pytest tests/ -q
+      - name: eval gate (reads committed live results; never calls a model)
+        run: python -m evals.gate

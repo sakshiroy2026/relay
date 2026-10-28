@@ -22,7 +22,7 @@ Read `README.md` (Status, Measured results, Roadmap), `NOTES.md` and the newest
   (WHAT IT IS / GOES IN / COMES OUT / TOUCHES / FAILS WHEN). Raw SQL, no ORM,
   no new frameworks; a new dependency needs a reason in the notes.
 - **Before every commit:** `ruff format .` → `ruff check .` →
-  `python -m mypy --explicit-package-bases relay/ chaos/ scripts/ tests/` →
+  `python -m mypy --explicit-package-bases relay/ chaos/ scripts/ tests/ evals/` →
   `python -m pytest tests/ -q` → `git status` (check `.env` isn't staged).
 - **Honest records.** README claims only what was verified, with real run ids.
   Label where numbers were measured (Neon vs local Postgres in a cloud container).
@@ -64,7 +64,7 @@ as output) ≈ **$0.006 per run** on Haiku 5.5 (≈ $0.12 on Sonnet 5.5).
 | P5 | Rung 3 + fallback — **BUILT** (learn/P5_ESCALATION.md, budget-guarded). Left: one paid run that forces rung 3 (e.g. `FAKE_BROKEN_FINAL` has no effect on the real model, so pick a domain it can't settle and watch for `escalated:` tags) | ~5 runs | ~$0.20 |
 | — | Deployment (EC2 + domain, Caddy, Grafana/OTLP) | Sakshi buys the infra first | — | infra cost |
 | — | Day 18 hand-labelling | Sakshi's own work | — | $0 |
-| P6 | Day 19/20 eval | golden set runs on Haiku + LLM-as-judge (Sonnet 5.5), gated in CI | ~50 runs + judge | ~$1–2 |
+| P6 | Eval — **BUILT** (`evals/`, learn/P6_EVAL.md, CI gate). Left: Sakshi's labels in `evals/golden.jsonl` (format: evals/README.md), then `python -m evals.run_eval --mode live --yes-spend`, commit `evals/results.json`, set real floors in `evals/thresholds.json` | ~50 runs + 50 judge calls | ~$0.40 |
 
 Total model spend for P1–P6: about **$2–3**; $5 of credits covers it with margin.
 Safety nets, all three on: (1) a Console spend limit, (2) Relay's per-run

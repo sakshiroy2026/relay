@@ -273,3 +273,14 @@ fallback_from). Both only on a real provider and only if pricing.estimate()
 (pessimistic: all prompt tokens uncached) fits the remaining budget, checked
 BEFORE the call. check_run refined: the same reply after a re-ask isn't "paid
 twice". 7 new tests (180 total).
+
+## P6 — Eval harness + CI (built for $0)
+
+Built by Claude Code; see learn/P6_EVAL.md. Explain-back owed.
+evals/: deterministic field scoring (strict normalization; null label =
+unknowable, a value there = wrong; flagged = abstained), a narrow Sonnet 5.5
+judge for industry only (json_schema verdict), accuracy AND precision, run_eval
+(demo $0 -> results.demo.json; live refuses without --yes-spend), gate.py (CI:
+committed LIVE results vs thresholds.json placeholders; demo results always
+fail). Demo eval: 6/6 and 0/6 as designed. .github/workflows/ci.yml: ruff, mypy,
+tests on Postgres 16, gate; no secrets. 16 new tests (196 total).
