@@ -39,11 +39,14 @@ Instead of an agent loop living in a process that dies when the process dies, ev
 | Chaos harness and measured results | ✅ 200 runs (results below) |
 | Idempotency / fencing / throughput test suites (blueprint §13 A2–A4) | ✅ measured (results below) + 15 new tests |
 | Schema repair ladder (free JSON extraction → one model re-ask) | ✅ measured: 75/75 repairable broken finals saved (results below) |
+| Rung 3 + model fallback: Sonnet 5.5 only after Haiku's chances are spent, only if a pessimistic estimate fits the run's remaining budget | ✅ built, 6 tests with a scripted provider; paid check pending (details: [`learn/P5_ESCALATION.md`](learn/P5_ESCALATION.md)) |
 | Prometheus `/metrics` + `/ops` dashboard compiled from the ledger; OTel traces with `steps.trace_id` | ✅ working (screenshot above), 5 tests |
 | SSE for the demo page (LISTEN/NOTIFY push, fetch-streaming, polling fallback) | ✅ median 3.7 ms push latency, browser-tested, 5 tests |
 | Dead-letter queue (reaper for exhausted runs, `requeued` ledger marker, operator CLI) | ✅ measured: requeued runs resume from their ledger, 0 restarts (results below) |
-| Real model provider | 🔨 next (everything so far runs on a scripted fake model) |
-| Public deployment | ⬜ planned |
+| Real model provider (Claude Haiku 5.5 via the official SDK; raw reply blocks replayed verbatim so thinking signatures stay valid across crashes; per-tenant `demo`/`live` mode) | ✅ built and tested through the SDK with a mock transport ($0); first paid run pending the key (details: [`learn/P1_REAL_MODEL.md`](learn/P1_REAL_MODEL.md)) |
+| Eval harness: field scoring vs a hand-labelled golden set, Sonnet 5.5 judge for `industry`, accuracy + precision (flagging = abstaining), CI gate on committed live results | ✅ built, 16 tests, demo eval run; real numbers need the Day 18 labels (details: [`learn/P6_EVAL.md`](learn/P6_EVAL.md)) |
+| CI (GitHub Actions: ruff, mypy, all tests on Postgres 16, eval gate; no secrets, no paid calls) | ✅ added |
+| Public deployment (Oracle Cloud Always Free VM: Caddy HTTPS + API + 3 workers, Neon; public visitors get a free demo-tenant key, never a paid one) | 🔨 config + guide ready ([`learn/DEPLOY.md`](learn/DEPLOY.md)); not yet built or launched |
 
 ---
 
@@ -252,6 +255,6 @@ Planned: Grafana + an OTLP collector (the config file is in the repo), Caddy, AW
 
 Currently implements durable execution, lease-based claiming with fencing, transcript replay, tool-level idempotency with a database backstop, full per-tenant API keys with rate and concurrency limits, a per-run budget, a repair ladder and dead-letter queue, a live demo page, and measured chaos-harness results.
 
-Next, in order: the switch from the fake model to a real provider (with real search and page fetch); public deployment; then a hand-labelled golden dataset with LLM-as-judge evaluation gated in CI.
+Next, in order: the first paid runs on the real model (built: P1, P3, P5), public deployment (config ready), then Sakshi's hand-labelled golden dataset for the eval harness (built: P6, gated in CI).
 
-Per-tool circuit breakers and retry-with-backoff landed with Day 8, the idempotency / fencing / throughput test suites with Day 16, the schema repair ladder + dead-letter queue with Day 9, and Prometheus metrics + OpenTelemetry tracing + the `/ops` dashboard with Day 17. The ladder's last rung — escalating to a *stronger* model — waits for the real-model switch; Grafana and the OTLP collector come with deployment.
+Per-tool circuit breakers and retry-with-backoff landed with Day 8, the idempotency / fencing / throughput test suites with Day 16, the schema repair ladder + dead-letter queue with Day 9, and Prometheus metrics + OpenTelemetry tracing + the `/ops` dashboard with Day 17. Rung 3 (escalating to a stronger model) and the model fallback are built behind budget guards (P5); Grafana and the OTLP collector come with deployment.

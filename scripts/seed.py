@@ -26,6 +26,13 @@ def create_api_key(cur, tenant_id: str) -> str:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Create a tenant (default 'dev') and its API key")
     parser.add_argument("--tenant", default="dev", help="tenant name (Day 10: second tenants too)")
+    parser.add_argument(
+        "--mode",
+        choices=["demo", "live"],
+        default=None,
+        help="P1: 'live' = this tenant's runs use the real model and cost money; "
+        "'demo' = the free fake model (the default for new tenants)",
+    )
     args = parser.parse_args()
 
     with pool.connection() as conn:
@@ -46,6 +53,11 @@ def main() -> None:
                 print("tenant already exists")
 
             tenant_id = row[0]
+            if args.mode is not None:
+                cur.execute(
+                    "UPDATE tenants SET run_mode = %s WHERE id = %s", (args.mode, tenant_id)
+                )
+                print(f"tenant {args.tenant!r} run_mode = {args.mode}")
 
             cur.execute(
                 "SELECT count(*) FROM api_keys WHERE tenant_id = %s",

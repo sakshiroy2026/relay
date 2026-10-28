@@ -38,15 +38,34 @@ from relay.config import settings
 from relay.core.costs import refresh_run_totals
 from relay.core.ledger import LeaseLost, append_step
 from relay.core.repair import correction_message, parse_final
-from relay.core.replay import replay_ledger
+from relay.core.replay import assistant_message, replay_ledger
 from relay.core.retry import FatalError, RetryableError, call_with_retries
-from relay.llm.client import ToolCall
-from relay.llm.factory import make_llm
-from relay.llm.pricing import price
+from relay.llm.client import Response, ToolCall
+from relay.llm.factory import make_llm, planner_model, resolve_mode
+from relay.llm.pricing import estimate, price
 from relay.obs.tracing import tracer
 
 MAX_TURNS = 15  # counts model_call rows already in the ledger, not just this worker's
 MODEL_RETRY_ATTEMPTS = 3  # tries per model call (Day 8); only transient failures are retried
+
+
+# A billed reply that is neither a tool turn nor an answer (P1: real models only).
+STOP_ERRORS = {
+    "refusal": "model_refused",
+    "max_tokens": "model_max_tokens",
+    "other": "model_stopped",
+}
+
+
+def _stop_error(run_id: UUID, index: int, stop_reason: str, worker_id: str) -> None:
+    """The reply was paid for and is already in the ledger; now end the run honestly."""
+    append_step(
+        run_id,
+        index,
+        "error",
+        {"reason": STOP_ERRORS[stop_reason], "detail": f"model stopped with {stop_reason!r}"},
+        worker_id,
+    )
 
 
 def _run_tool(
@@ -56,12 +75,19 @@ def _run_tool(
     tc: ToolCall,
     worker_id: str,
     messages: list[dict[str, Any]],
+    tools_provider: str = "",
 ) -> int:
     """tool_call -> run it -> tool_result -> tool message. Returns the next index."""
     # Day 7: the key comes from the model's call id, NOT the step index: a re-run after
     # a crash (Day 6) writes a new tool_call row at a new index but must reuse the key.
     idem_key = f"{run_id}:{tc.id}"
-    ctx = ToolContext(run_id=run_id, domain=domain, step_index=index, idem_key=idem_key)
+    ctx = ToolContext(
+        run_id=run_id,
+        domain=domain,
+        step_index=index,
+        idem_key=idem_key,
+        tools_provider=tools_provider,
+    )
 
     index = append_step(
         run_id,
@@ -105,13 +131,18 @@ def _judge(
     worker_id: str,
     messages: list[dict[str, Any]],
     repairs_used: int,
+    escalate_to: str | None = None,
+    escalated: str | None = None,
 ) -> tuple[str, dict[str, Any] | None, int]:
-    """Judge a final answer through the repair ladder (Day 9).
+    """Judge a final answer through the repair ladder (Day 9, rung 3 since P5).
 
     Returns ("final", record, next_index)   — validated, `final` written;
             ("repair", None, next_index)    — a `repair_requested` row and the
               correction message were written; the caller's next model call is
               the rung-2 re-ask;
+            ("escalate", None, next_index)  — rung 3: the re-ask failed too, and
+              the caller can afford `escalate_to`; the row names that model and
+              the caller's next call uses it (replay remembers it);
             ("error", None, next_index)     — out of rungs; `error` written.
     """
     record, repaired_by, errors = parse_final(content)  # rungs 0 and 1
@@ -119,6 +150,7 @@ def _judge(
         result = record.model_dump(mode="json")
         # how it was salvaged goes to the ledger, not into the run's result
         tags = ([repaired_by] if repaired_by else []) + (["model_reask"] if repairs_used else [])
+        tags += [f"escalated:{escalated}"] if escalated else []
         payload = {**result, "repaired_by": tags} if tags else result
         index = append_step(run_id, index, "final", payload, worker_id)
         return "final", result, index
@@ -130,6 +162,18 @@ def _judge(
         )
         messages.append({"role": "user", "content": message})
         return "repair", None, index
+
+    if escalate_to:  # rung 3 (P5): the same correction, answered by a stronger model
+        message = correction_message(errors)
+        index = append_step(
+            run_id,
+            index,
+            "repair_requested",
+            {"message": message, "errors": errors, "escalate_to": escalate_to},
+            worker_id,
+        )
+        messages.append({"role": "user", "content": message})
+        return "escalate", None, index
 
     index = append_step(
         run_id, index, "error", {"reason": "invalid_final_answer", "detail": errors}, worker_id
@@ -143,11 +187,12 @@ def run_agent(
     worker_id: str,
     heartbeat: Callable[[], bool],
     budget_usd: float,
+    mode: str | None = None,
 ) -> dict[str, Any] | None:
     # --- SETUP: read the chart before doing anything ---
     # The user message is rebuilt from the run_started row; `domain` goes to the
-    # tools (save_company writes under the run's own domain).
-    llm = make_llm()
+    # tools (save_company writes under the run's own domain). `mode` (P1) picks the
+    # model and tools: "demo" = fake/fake, "live" = real/real, None = process default.
     state = replay_ledger(run_id)  # one read; state.next_index is our belief from here on
 
     # --- Resume edge cases: the run may already have a verdict ---
@@ -161,17 +206,53 @@ def run_agent(
     spent = state.spent_usd  # from the ledger, so a resumed run keeps counting
     repairs_used = state.repairs_used  # re-asks are counted from the ledger too
 
-    if state.unjudged_answer is not None:  # died after the last model_call, before judging it
-        outcome, result, index = _judge(
-            run_id, index, state.unjudged_answer, worker_id, messages, repairs_used
+    if state.unhandled_stop is not None:  # died after a billed refusal/max_tokens reply
+        _stop_error(run_id, index, state.unhandled_stop, worker_id)
+        return None
+
+    try:  # before any money is spent: a misconfigured model fails the run, not the worker
+        llm_provider, tools = resolve_mode(mode)
+        llm = make_llm(llm_provider)
+        model = planner_model(llm_provider)
+    except Exception as exc:
+        append_step(
+            run_id, index, "error", {"reason": "model_misconfigured", "detail": str(exc)}, worker_id
         )
-        if outcome != "repair":
+        return None
+
+    # --- P5: a stronger model as a last resort, only on a real provider, only if affordable ---
+    escalated = state.escalated_to  # from the ledger: a resumed run stays escalated
+    if escalated:
+        model = escalated
+    last_prompt = state.last_prompt_tokens
+
+    def can_afford(candidate: str) -> bool:
+        # pessimistic (no cache) price of one call on `candidate`, checked BEFORE it is made
+        return (
+            llm_provider == "anthropic"
+            and bool(candidate)
+            and candidate != model
+            and spent + estimate(candidate, last_prompt + 1000) <= budget_usd
+        )
+
+    def escalation() -> str | None:
+        esc = settings.escalation_model
+        return esc if not escalated and can_afford(esc) else None
+
+    if state.unjudged_answer is not None:  # died after the last model_call, before judging it
+        esc = escalation()
+        outcome, result, index = _judge(
+            run_id, index, state.unjudged_answer, worker_id, messages, repairs_used, esc, escalated
+        )
+        if outcome not in ("repair", "escalate"):
             return result  # the record, or None for the error case
         repairs_used += 1  # fall through: the loop's next model call is the re-ask
+        if outcome == "escalate" and esc:
+            model = escalated = esc
 
     # --- Died mid-tool: run what the last reply asked for but never got back ---
     for tc in state.pending_tool_calls:
-        index = _run_tool(run_id, domain, index, tc, worker_id, messages)
+        index = _run_tool(run_id, domain, index, tc, worker_id, messages, tools)
 
     for turn in range(state.turns_used, MAX_TURNS):
         # --- C: still ours? Check before spending money. ---
@@ -193,14 +274,14 @@ def run_agent(
         # Worst-case retry sleep is ~3 s, far below the lease, so no extra
         # heartbeat is needed. A model down for longer fails the run with an
         # `error` step; nothing is charged for calls that never happened.
-        try:
+        def ask(use: str, turn: int = turn) -> tuple[Response, int]:
             with tracer().start_as_current_span(
                 "relay.model_call",
-                attributes={"gen_ai.request.model": settings.model_planner, "relay.turn": turn},
+                attributes={"gen_ai.request.model": use, "relay.turn": turn},
             ) as span:
-                response, attempts = call_with_retries(
+                reply, tries = call_with_retries(
                     lambda: llm.call(
-                        model=settings.model_planner,
+                        model=use,
                         system=SYSTEM_PROMPT,
                         messages=messages,
                         tools=TOOL_SCHEMAS,
@@ -209,11 +290,25 @@ def run_agent(
                 )
                 span.set_attributes(
                     {
-                        "gen_ai.usage.input_tokens": response.input_tokens,
-                        "gen_ai.usage.output_tokens": response.output_tokens,
-                        "relay.attempts": attempts,
+                        "gen_ai.usage.input_tokens": reply.input_tokens,
+                        "gen_ai.usage.output_tokens": reply.output_tokens,
+                        "relay.attempts": tries,
                     }
                 )
+            return reply, tries
+
+        fallback_from: str | None = None
+        try:
+            try:
+                response, attempts = ask(model)
+            except RetryableError:
+                # P5: the primary is still down after its retries. One turn on the
+                # fallback model, if the run can afford it; the next turn tries the
+                # primary again (not sticky: an outage is usually short).
+                if not can_afford(settings.fallback_model):
+                    raise
+                fallback_from = model
+                response, attempts = ask(settings.fallback_model)
         except RetryableError as exc:  # still failing after every attempt
             append_step(
                 run_id,
@@ -239,34 +334,50 @@ def run_agent(
             run_id,
             index,
             "model_call",
-            {**asdict(response), "cost_usd": cost, "attempts": attempts},
+            {
+                **asdict(response),
+                "cost_usd": cost,
+                "attempts": attempts,
+                **({"fallback_from": fallback_from} if fallback_from else {}),
+            },
             worker_id,
         )
         spent += cost
+        last_prompt = (
+            response.input_tokens + response.cache_read_tokens + response.cache_write_tokens
+        )
         refresh_run_totals(run_id)  # display copy on the runs row; the ledger stays the truth
 
         # --- J: the model must remember what it asked for ---
         messages.append(
-            {
-                "role": "assistant",
-                "content": response.content,
-                "tool_calls": [asdict(tc) for tc in response.tool_calls],
-            }
+            assistant_message(
+                response.content,
+                [asdict(tc) for tc in response.tool_calls],
+                response.raw_content,
+            )
         )
+
+        # --- a billed reply with no usable outcome (refusal, max_tokens): end the run ---
+        if response.stop_reason in STOP_ERRORS:
+            _stop_error(run_id, index, response.stop_reason, worker_id)
+            return None
 
         # --- G: final answer? Judge it through the repair ladder. ---
         if response.stop_reason == "end_turn":
+            esc = escalation()
             outcome, result, index = _judge(
-                run_id, index, response.content, worker_id, messages, repairs_used
+                run_id, index, response.content, worker_id, messages, repairs_used, esc, escalated
             )
-            if outcome != "repair":
+            if outcome not in ("repair", "escalate"):
                 return result
             repairs_used += 1
-            continue  # the next turn is the rung-2 re-ask
+            if outcome == "escalate" and esc:
+                model = escalated = esc  # rung 3: the next call goes to the stronger model
+            continue  # the next turn is the re-ask
 
         # --- H, F, A, K: for each tool the model asked for ---
         for tc in response.tool_calls:
-            index = _run_tool(run_id, domain, index, tc, worker_id, messages)
+            index = _run_tool(run_id, domain, index, tc, worker_id, messages, tools)
 
     # --- L: MAX_TURNS passed with no final answer ---
     append_step(run_id, index, "error", {"reason": "max_turns", "max_turns": MAX_TURNS}, worker_id)

@@ -128,10 +128,23 @@ let workerColors = new Map();
 function loadKey() { try { return localStorage.getItem(KEY_STORE) || ""; } catch { return ""; } }
 function saveKey(v) { try { v ? localStorage.setItem(KEY_STORE, v) : localStorage.removeItem(KEY_STORE); } catch {} }
 $("key").value = loadKey();
+// Deployment: no key of your own? The server may offer a public demo key (its
+// tenant runs the free scripted model; the server refuses to offer a paid one).
+if (!$("key").value) {
+  fetch("/demo-config").then((r) => r.json()).then((c) => {
+    if (c.demo_key && !$("key").value) {
+      $("key").value = c.demo_key;
+      say(c.note || "using the public demo key", "info");
+    }
+  }).catch(() => {});
+}
 $("key").addEventListener("change", () => saveKey($("key").value.trim()));
 $("forget").addEventListener("click", () => { $("key").value = ""; saveKey(""); });
 
-function say(text) { $("msg").textContent = text || ""; }
+function say(text, tone) {  // tone "info" = a neutral note; anything else = an error
+  $("msg").textContent = text || "";
+  $("msg").style.color = tone === "info" ? "var(--muted)" : "";
+}
 function shortWorker(w) { return w === "api" ? "api" : w.split(":")[0].slice(0, 6); }
 function colorFor(w) {
   if (w === "api") return "#8a94a6";

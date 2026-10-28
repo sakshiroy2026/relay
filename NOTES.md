@@ -248,3 +248,50 @@ only, text cut to page_text_max_chars=8000. Failures keep the Day 8 split.
 mutation check (re-resolving before connect fails the pinning test).
 UNVERIFIED until the first real call: Tavily's wire format (docs host blocked
 from the container). The pinned fetcher bypasses HTTP proxies by design.
+
+## P1 — Real model adapter (built for $0, paid proof pending)
+
+Built by Claude Code; see learn/P1_REAL_MODEL.md. Explain-back owed.
+relay/llm/anthropic_client.py behind the same LLMClient protocol (official SDK
+2.x, SDK retries off). Haiku 5.5 thinks, and a thinking signature is only valid
+in a byte-identical conversation, so model_call rows store the raw reply blocks
+and replay sends them verbatim (crash test: 4 requests for 4 turns across a
+takeover, each an exact prefix-extension; mutant replay without raw fails it).
+Thinking-mismatch 400 -> strip + retry once. Refusal/max_tokens = billed
+Response: cost recorded, then error. Migration 008 tenants.run_mode: demo (fake,
+$0, default) vs live (Haiku + real tools, $0.05/run). scripts/live_smoke.py is
+the paid proof (refuses without key and --yes-spend). Demo run b9fcb695 OK.
+New dep: anthropic. 25 new tests (173 total).
+
+## P5 — Repair rung 3 + model fallback (built for $0)
+
+Built by Claude Code; see learn/P5_ESCALATION.md. Explain-back owed.
+Sonnet 5.5 only as a last resort: rung 3 after Haiku's answer AND its re-ask
+fail (a repair_requested row with escalate_to; sticky, replay remembers it), or
+a per-turn fallback when Haiku is still down after 3 retries (model_call records
+fallback_from). Both only on a real provider and only if pricing.estimate()
+(pessimistic: all prompt tokens uncached) fits the remaining budget, checked
+BEFORE the call. check_run refined: the same reply after a re-ask isn't "paid
+twice". 7 new tests (180 total).
+
+## P6 — Eval harness + CI (built for $0)
+
+Built by Claude Code; see learn/P6_EVAL.md. Explain-back owed.
+evals/: deterministic field scoring (strict normalization; null label =
+unknowable, a value there = wrong; flagged = abstained), a narrow Sonnet 5.5
+judge for industry only (json_schema verdict), accuracy AND precision, run_eval
+(demo $0 -> results.demo.json; live refuses without --yes-spend), gate.py (CI:
+committed LIVE results vs thresholds.json placeholders; demo results always
+fail). Demo eval: 6/6 and 0/6 as designed. .github/workflows/ci.yml: ruff, mypy,
+tests on Postgres 16, gate; no secrets. 16 new tests (196 total).
+
+## Deployment config (Oracle Cloud Always Free) + public demo key
+
+Built by Claude Code; see learn/DEPLOY.md. Explain-back owed.
+docker-compose.prod.yml (Caddy HTTPS + API + 3 workers, restart unless-stopped,
+Neon stays the DB), deploy/Caddyfile (flush_interval -1 for SSE), Dockerfile now
+ships alembic + scripts, .env.example. /demo-config offers PUBLIC_DEMO_KEY to
+visitors ONLY if its tenant is demo-mode (re-checked per request); the page
+prefills it. Browser-verified: a keyless visitor ran a free 14-step run.
+NOT YET BUILT: no Docker in the dev container; the first build is on the server.
+4 new tests (200 total).

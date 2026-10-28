@@ -1,0 +1,6 @@
+{
+  "_comment": "Placeholders until the Day 18 labels exist; Sakshi sets the real bar after the first live eval.",
+  "min_labels": 20,
+  "min_precision": 0.85,
+  "min_accuracy": 0.6
+}

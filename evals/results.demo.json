@@ -1,0 +1,172 @@
+{
+  "mode": "demo",
+  "model": "fake-planner",
+  "judge": null,
+  "commit": "7da2938",
+  "golden": "evals/golden.example.jsonl",
+  "labels": 2,
+  "cost_usd": {
+    "runs": 0.0,
+    "judge": 0.0
+  },
+  "elapsed_s": 3.0,
+  "summary": {
+    "overall": {
+      "scored": 12,
+      "correct": 6,
+      "wrong": 6,
+      "abstained": 0,
+      "accuracy": 0.5,
+      "precision": 0.5,
+      "abstention_rate": 0.0
+    },
+    "per_field": {
+      "name": {
+        "scored": 2,
+        "correct": 1,
+        "wrong": 1,
+        "abstained": 0,
+        "accuracy": 0.5,
+        "precision": 0.5,
+        "abstention_rate": 0.0
+      },
+      "hq_country": {
+        "scored": 2,
+        "correct": 1,
+        "wrong": 1,
+        "abstained": 0,
+        "accuracy": 0.5,
+        "precision": 0.5,
+        "abstention_rate": 0.0
+      },
+      "founded_year": {
+        "scored": 2,
+        "correct": 1,
+        "wrong": 1,
+        "abstained": 0,
+        "accuracy": 0.5,
+        "precision": 0.5,
+        "abstention_rate": 0.0
+      },
+      "industry": {
+        "scored": 2,
+        "correct": 1,
+        "wrong": 1,
+        "abstained": 0,
+        "accuracy": 0.5,
+        "precision": 0.5,
+        "abstention_rate": 0.0
+      },
+      "employee_range": {
+        "scored": 2,
+        "correct": 1,
+        "wrong": 1,
+        "abstained": 0,
+        "accuracy": 0.5,
+        "precision": 0.5,
+        "abstention_rate": 0.0
+      },
+      "funding_stage": {
+        "scored": 2,
+        "correct": 1,
+        "wrong": 1,
+        "abstained": 0,
+        "accuracy": 0.5,
+        "precision": 0.5,
+        "abstention_rate": 0.0
+      }
+    },
+    "records": 2
+  },
+  "rows": [
+    {
+      "domain": "eval-demo-1.example",
+      "run_id": "02c9e066",
+      "status": "succeeded",
+      "cost_usd": 0.026172,
+      "fields": {
+        "name": {
+          "outcome": "correct",
+          "expected": "Acme Payments Pvt Ltd",
+          "predicted": "Acme Payments",
+          "method": "normalized"
+        },
+        "hq_country": {
+          "outcome": "correct",
+          "expected": "India",
+          "predicted": "India",
+          "method": "normalized"
+        },
+        "founded_year": {
+          "outcome": "correct",
+          "expected": 2016,
+          "predicted": 2016,
+          "method": "exact"
+        },
+        "industry": {
+          "outcome": "correct",
+          "expected": "Fintech / Payments",
+          "predicted": "Fintech / Payments",
+          "method": "exact"
+        },
+        "employee_range": {
+          "outcome": "correct",
+          "expected": "201-1000",
+          "predicted": "201-1000",
+          "method": "exact"
+        },
+        "funding_stage": {
+          "outcome": "correct",
+          "expected": "series_b",
+          "predicted": "series_b",
+          "method": "exact"
+        }
+      }
+    },
+    {
+      "domain": "eval-demo-2.example",
+      "run_id": "80b4755d",
+      "status": "succeeded",
+      "cost_usd": 0.026172,
+      "fields": {
+        "name": {
+          "outcome": "wrong",
+          "expected": "Other Corp",
+          "predicted": "Acme Payments",
+          "method": "normalized"
+        },
+        "hq_country": {
+          "outcome": "wrong",
+          "expected": "USA",
+          "predicted": "India",
+          "method": "normalized"
+        },
+        "founded_year": {
+          "outcome": "wrong",
+          "expected": 2001,
+          "predicted": 2016,
+          "method": "exact"
+        },
+        "industry": {
+          "outcome": "wrong",
+          "expected": "Logistics",
+          "predicted": "Fintech / Payments",
+          "method": "heuristic"
+        },
+        "employee_range": {
+          "outcome": "wrong",
+          "expected": "5000+",
+          "predicted": "201-1000",
+          "method": "exact"
+        },
+        "funding_stage": {
+          "outcome": "wrong",
+          "expected": null,
+          "predicted": "series_b",
+          "method": "unknowable"
+        }
+      }
+    }
+  ],
+  "judge_verdicts": []
+}

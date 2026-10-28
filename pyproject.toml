@@ -17,6 +17,8 @@ dependencies = [
     "pydantic-settings",
     "structlog",
     "bcrypt",
+    # P1: the official Anthropic SDK for the real model (2.x sends API version 2026-10-21)
+    "anthropic>=2.3,<3",
     # Day 17 observability
     "prometheus-client",
     "opentelemetry-sdk",

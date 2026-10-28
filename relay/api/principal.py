@@ -44,6 +44,7 @@ class Principal:
     key_name: str  # for operator logs ("dev key"), never the key itself
     max_concurrent_runs: int
     requests_per_minute: int
+    run_mode: str = "demo"  # P1: "demo" = fake model ($0), "live" = the real model
 
 
 # sha256(full key) -> (expires_at, Principal). sha256 so a heap dump of the
@@ -69,7 +70,7 @@ def _lookup(key: str) -> Principal | None:
             cur.execute(
                 """
                 SELECT k.key_hash, k.name, t.id AS tenant_id,
-                       t.max_concurrent_runs, t.requests_per_minute
+                       t.max_concurrent_runs, t.requests_per_minute, t.run_mode
                 FROM api_keys k
                 JOIN tenants t ON t.id = k.tenant_id
                 WHERE k.key_prefix = %s AND k.revoked_at IS NULL
@@ -84,6 +85,7 @@ def _lookup(key: str) -> Principal | None:
         key_name=row["name"],
         max_concurrent_runs=row["max_concurrent_runs"],
         requests_per_minute=row["requests_per_minute"],
+        run_mode=row["run_mode"],
     )
 
 
@@ -92,7 +94,8 @@ def _dev_principal() -> Principal:
     with pool.connection() as conn:
         with conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
-                "SELECT max_concurrent_runs, requests_per_minute FROM tenants WHERE id = %s",
+                "SELECT max_concurrent_runs, requests_per_minute, run_mode "
+                "FROM tenants WHERE id = %s",
                 (settings.dev_tenant_id,),
             )
             row = cur.fetchone()
@@ -103,6 +106,7 @@ def _dev_principal() -> Principal:
         key_name="env key",
         max_concurrent_runs=row["max_concurrent_runs"],
         requests_per_minute=row["requests_per_minute"],
+        run_mode=row["run_mode"],
     )
 
 

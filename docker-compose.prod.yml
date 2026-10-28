@@ -1,0 +1,41 @@
+# Production on one small server (Oracle Cloud Always Free, see learn/DEPLOY.md):
+# the API, 3 workers and Caddy (HTTPS). Postgres is Neon: DATABASE_URL in .env.
+#   docker compose -f docker-compose.prod.yml up -d --build
+#   docker compose -f docker-compose.prod.yml run --rm api alembic upgrade head
+# .env on the server holds the secrets; it is never committed (see .env.example).
+services:
+  api:
+    build: .
+    command: ["uvicorn", "relay.api.main:app", "--host", "0.0.0.0", "--port", "8000",
+              "--proxy-headers", "--forwarded-allow-ips", "*"]
+    env_file: .env
+    restart: unless-stopped
+    expose: ["8000"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  worker:
+    build: .
+    env_file: .env
+    restart: unless-stopped  # after a crash or reboot; a run in flight is resumed by another worker
+    deploy:
+      replicas: 3
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      RELAY_DOMAIN: ${RELAY_DOMAIN:?set RELAY_DOMAIN in .env}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data      # certificates: keep across restarts (Let's Encrypt rate limits)
+      - caddy_config:/config
+    depends_on: [api]
+
+volumes:
+  caddy_data: {}
+  caddy_config: {}

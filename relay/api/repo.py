@@ -28,6 +28,7 @@ from uuid import UUID
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+from relay.config import settings
 from relay.db import pool
 
 AGENT_VERSION = "enrich@v2"
@@ -55,9 +56,12 @@ def create_run(
     domain: str,
     max_concurrent: int,
     idempotency_key: str | None = None,
+    run_mode: str = "demo",
 ) -> dict[str, Any]:
-    payload = {"domain": domain}
-    body_hash = request_hash(payload)
+    body_hash = request_hash({"domain": domain})  # what the CLIENT sent; the mode is ours
+    payload = {"domain": domain, "mode": run_mode}  # the run keeps its mode for life (P1)
+    # live runs spend real money: they get the tight live budget, demo runs the default
+    budget = settings.live_run_budget_usd if run_mode == "live" else None
     with pool.connection() as conn:
         with conn.cursor() as cur:
             # One advisory lock per tenant for the length of this transaction:
@@ -94,9 +98,9 @@ def create_run(
                 raise ConcurrencyLimit(open_runs, max_concurrent)  # rolls the lock back too
 
             cur.execute(
-                "INSERT INTO runs (tenant_id, input, agent_version) VALUES (%s, %s, %s) "
-                "RETURNING id, status",
-                (tenant_id, Jsonb(payload), AGENT_VERSION),
+                "INSERT INTO runs (tenant_id, input, agent_version, budget_usd) "
+                "VALUES (%s, %s, %s, COALESCE(%s, 0.25)) RETURNING id, status",
+                (tenant_id, Jsonb(payload), AGENT_VERSION, budget),
             )
             created = cur.fetchone()
             if created is None:

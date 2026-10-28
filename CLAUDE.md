@@ -22,7 +22,7 @@ Read `README.md` (Status, Measured results, Roadmap), `NOTES.md` and the newest
   (WHAT IT IS / GOES IN / COMES OUT / TOUCHES / FAILS WHEN). Raw SQL, no ORM,
   no new frameworks; a new dependency needs a reason in the notes.
 - **Before every commit:** `ruff format .` → `ruff check .` →
-  `python -m mypy --explicit-package-bases relay/ chaos/ scripts/ tests/` →
+  `python -m mypy --explicit-package-bases relay/ chaos/ scripts/ tests/ evals/` →
   `python -m pytest tests/ -q` → `git status` (check `.env` isn't staged).
 - **Honest records.** README claims only what was verified, with real run ids.
   Label where numbers were measured (Neon vs local Postgres in a cloud container).
@@ -34,12 +34,14 @@ Read `README.md` (Status, Measured results, Roadmap), `NOTES.md` and the newest
 
 ## Where things stand
 
-All no-paid-model stages are DONE, on branch `day16-tests` (5 commits on top of main
-`207ad20`; merge it first if not merged yet): Day 16 (A2/A3/A4 harnesses), Day 9
-(repair ladder + DLQ, migration 004), Day 10 (full API keys, repository layer, rate
-+ concurrency limits, migration 005), Day 17 (Prometheus collector over the ledger,
-OTel traces, `/ops` page), Day 11 (SSE via LISTEN/NOTIFY, migration 006).
-109 tests pass. Everything still runs on the scripted fake model (`LLM_PROVIDER=fake`).
+`main` has everything up to PR #2 (Days 16, 9, 10, 17, 11, the client
+Idempotency-Key, real tools). Branch `paid-phase` (PR #3) adds, all built and
+tested for **$0** (a mock HTTP transport drives the real SDK; nothing paid
+has run yet): P1 the real model adapter, P5 rung 3 + fallback, P6 the eval
+harness + GitHub Actions CI (passing), and the deployment config + guide
+(`learn/DEPLOY.md`, Oracle Cloud Always Free; never built: no Docker in the
+dev container). 200 tests pass. Runs are `demo` (fake model + fake tools, $0)
+unless their tenant's `run_mode` is `live` (migration 008).
 
 Local environment in a cloud container (no Docker, no Neon): Postgres 16 must run as
 the `postgres` user — `initdb -D /tmp/relay-pg/data -U relay --auth=trust`,
@@ -57,14 +59,14 @@ as output) ≈ **$0.006 per run** on Haiku 5.5 (≈ $0.12 on Sonnet 5.5).
 
 | # | Stage | Builds | Paid runs needed | Est. cost |
 |---|---|---|---|---|
-| P1 | Real model switch | `relay/llm/anthropic.py` behind the existing `LLMClient` protocol (official `anthropic` SDK; tool-use ↔ Relay `Response`/`ToolCall`; usage incl. cache tokens; `refusal` stop reason; 429/5xx/connection → `RetryableError`, 400 → `FatalError`; SDK `max_retries=0` because Relay retries itself); real prices in `pricing.py`; lower the default `budget_usd` for Haiku. Unit tests use stubbed responses ($0) | ~10 smoke runs | ~$0.10 |
+| P1 | Real model — **BUILT** (`relay/llm/anthropic_client.py`, learn/P1_REAL_MODEL.md, tested via the SDK + mock transport). Left: the paid proof `python -m scripts.live_smoke --yes-spend --runs 3` on a live tenant (`seed.py --tenant NAME --mode live`) | ~3–10 runs | ~$0.02–0.06 |
 | P2 | Real tools — **BUILT** (learn/REAL_TOOLS.md, 32 tests). Left to do: one real Tavily search to verify its request/response format (free tier, $0; the docs host was blocked from the container, so the format is from memory), then one real fetch. Needs `TAVILY_API_KEY` (free signup) and `TOOLS_PROVIDER=real`. The pinned fetcher bypasses HTTP proxies by design, so in a proxied cloud container real fetches may be blocked: verify on a normal host | 1 search + 1 fetch | $0 |
-| P3 | Cost hygiene | prompt caching on the frozen system prompt + tool list (verify `cache_read_input_tokens` > 0; Haiku has a minimum cacheable prefix — measure, don't assume); effort setting measured (`low` vs `medium`) | ~10 runs | ~$0.10 |
+| P3 | Cost hygiene — **BUILT as settings** (`LLM_PROMPT_CACHE=true`, automatic `cache_control`; `LLM_EFFORT=medium`). Left: measure with `scripts/live_smoke.py`: `cache_read_share` > 0 (Haiku has a minimum cacheable prefix, so measure, don't assume), then `LLM_EFFORT=low` vs `medium` on the same domains, cost and success side by side | ~6–10 runs | ~$0.06 |
 | P4 | Chaos harness on the real model | re-run `chaos/fault_test.py`-style kill tests, small N (≈30), budget caps on | ~30 runs | ~$0.30 |
-| P5 | Repair ladder rung 3 + fallback model | escalate a still-broken final from Haiku to Sonnet 5.5 once; model fallback when the primary is unavailable | ~5 runs | ~$0.20 |
-| — | Deployment (EC2 + domain, Caddy, Grafana/OTLP) | Sakshi buys the infra first | — | infra cost |
+| P5 | Rung 3 + fallback — **BUILT** (learn/P5_ESCALATION.md, budget-guarded). Left: one paid run that forces rung 3 (e.g. `FAKE_BROKEN_FINAL` has no effect on the real model, so pick a domain it can't settle and watch for `escalated:` tags) | ~5 runs | ~$0.20 |
+| — | Deployment — **config + guide ready** (learn/DEPLOY.md: Oracle Cloud Always Free VM + DuckDNS + Neon, `docker-compose.prod.yml`, Caddy). Never built (no Docker in the dev container): the first build is on the server. Public visitors get a demo-tenant key ($0) | Sakshi follows the guide | $0 |
 | — | Day 18 hand-labelling | Sakshi's own work | — | $0 |
-| P6 | Day 19/20 eval | golden set runs on Haiku + LLM-as-judge (Sonnet 5.5), gated in CI | ~50 runs + judge | ~$1–2 |
+| P6 | Eval — **BUILT** (`evals/`, learn/P6_EVAL.md, CI gate). Left: Sakshi's labels in `evals/golden.jsonl` (format: evals/README.md), then `python -m evals.run_eval --mode live --yes-spend`, commit `evals/results.json`, set real floors in `evals/thresholds.json` | ~50 runs + 50 judge calls | ~$0.40 |
 
 Total model spend for P1–P6: about **$2–3**; $5 of credits covers it with margin.
 Safety nets, all three on: (1) a Console spend limit, (2) Relay's per-run
