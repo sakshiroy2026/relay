@@ -155,3 +155,96 @@ by all workers (migration 003). Proofs: 50/50 flaky runs succeeded (41 calls rec
 by retry), breaker opened after 5 consecutive failures and self-closed via one probe,
 kill -9 mid-retries resumed clean (run `28ca2373`). Numbers: chaos/fault_results.json
 (run on local Postgres in a cloud container, not Neon).
+
+## Day 16 — Idempotency, fencing and throughput, measured
+
+Built by Claude Code; see learn/DAY16.md. Explain-back owed.
+No mechanism changed; three harnesses leaned on the proven ones. A2: 500 keys
+raced by 4 processes + 200 kill -9 mid-write -> every key executed once, receipt
+and row never disagreed. A3: owner SIGSTOPped 100x -> 0 stale finishes (fenced by
+the constraint 81x, heartbeat 14x, guarded finish 2x); 16 runs where the zombie's
+write landed first and the NEW owner was fenced — still one valid history.
+A4: claim query 0.111 ms with 100k finished runs (8.4 ms without the partial
+index); 16 workers at 0.2 s model latency = 15.6x speedup (98% efficiency).
+check_run.py now validates ledger shape too. Numbers: chaos/*_results.json
+(local Postgres in a cloud container, not Neon).
+
+## Day 9 — Schema repair ladder + dead-letter queue
+
+Built by Claude Code; see learn/DAY9.md. Explain-back owed.
+Ladder: strict parse -> free JSON extraction (brace-counting, handles fences AND
+prose) -> ONE re-ask where the model sees its own validation errors as a real,
+replayable turn (new step kind repair_requested, migration 004). 75/75 repairable
+broken finals saved; 0 repairs on clean runs; hopeless answers fail after exactly
+one re-ask. Rung 3 (stronger model) waits for the real-model switch.
+DLQ: idle workers reap lease-expired runs with attempts spent -> status 'dead'
+(unused since Day 1, now real); scripts/dlq.py lists by reason and requeues.
+A requeue appends a 'requeued' ledger marker FIRST (clears the verdict in replay),
+then flips to pending with max_attempts = attempts + 5 — so requeued runs RESUME:
+24/24 model-outage failures requeued and finished without re-paying pre-outage
+calls; 5/5 kill-9-until-exhausted runs reaped, requeued, succeeded.
+Numbers: chaos/repair_dlq_results.json (local Postgres, not Neon). 20 new tests (92).
+
+## Day 10 — Full API keys, tenant scoping, rate limits
+
+Built by Claude Code; see learn/DAY10.md. Explain-back owed.
+Keys are rly_<prefix>.<secret>: indexed prefix lookup, bcrypt check, Principal
+(tenant + limits); verified keys cached 60 s as SHA-256 digests (294 ms cold ->
+7 ms cached, measured). Env key still works -> dev tenant. All API SQL moved to
+a repository layer where tenant_id is a required argument; cross-tenant reads
+404 (not 403). Migration 005: per-tenant requests_per_minute (in-process window,
+429) and max_concurrent_runs (Postgres advisory lock + count: 8 racing creates
+vs cap 3 -> exactly 3 rows). relay/api/auth.py deleted; seed.py --tenant NAME.
+7 new tests (99 total).
+
+## Day 17 — Observability: Prometheus, OpenTelemetry, the /ops page
+
+Built by Claude Code; see learn/DAY17.md. Explain-back owed.
+No counters in the hot path: a custom Prometheus collector aggregates the LEDGER
+at scrape time (38 relay_* series: runs, resumes, spend, retries, breaker state,
+repair rungs, DLQ depth, and relay_write_effects_executed_twice — the one alert
+that matters). HTTP latency labeled by route template (cardinality). OTel: one
+trace per run ATTEMPT, GenAI spans per model call/tool; steps.trace_id (reserved
+since migration 001) finally written — verified: all 13 worker rows of a run
+share one trace id. OTLP export is one env var when a collector exists.
+/ops dashboard (static HTML -> /ops.json) screenshot in README, taken over this
+container's own 4,300-run test history. New deps (first since Day 1):
+prometheus-client, opentelemetry-sdk, otlp-http exporter. 5 new tests (104).
+
+## Day 11 — SSE: the ledger pushed, not polled
+
+Built by Claude Code; see learn/DAY11.md. Explain-back owed.
+Migration 006: AFTER INSERT ON steps -> pg_notify (fires on COMMIT: a fenced
+zombie's rolled-back insert rings nothing). GET /v1/runs/{id}/events holds one
+LISTEN connection and on each bell RE-READS run+steps via the tenant-scoped repo
+(bell says "look again"; the ledger stays the only truth), emits update on a
+fingerprint change, done at terminal. Page uses fetch-streaming (EventSource
+can't send Authorization) with automatic fallback to the old polling.
+Measured: 65 steps over 5 live runs, median 3.7 ms / p90 6.7 ms insert-commit ->
+parsed event (vs ~500 ms avg at 1 s polling); Playwright browser run clean.
+5 new tests (109 total).
+
+## Client Idempotency-Key (the first idempotency layer)
+
+Built by Claude Code; see learn/IDEMPOTENCY_KEY.md. Explain-back owed.
+Migration 007: idempotency_keys (tenant_id, key) -> run_id + body sha256. The key
+row commits with the run and step 0; the Day 10 per-tenant advisory lock already
+serialises racing retries. Same key + same body -> same run, header
+Idempotent-Replayed: true (checked BEFORE the cap: a replay creates nothing);
+same key + other body -> 422; malformed -> 400. Demo page sends a fresh UUID per
+Start. Live: run 4f186a0d replayed, 1 row. 7 new tests (116 total).
+
+## Real tools (P2): Tavily search + pinned-IP fetcher
+
+Built by Claude Code; see learn/REAL_TOOLS.md. Explain-back owed.
+TOOLS_PROVIDER=real swaps in tavily_search + fetch_page under the SAME names and
+schemas (same model menu, same cache prefix); refuses to boot without
+TAVILY_API_KEY. Stdlib only, no new deps. fetch_page connects to the IP
+check_url APPROVED (never re-resolves = DNS rebinding closed) while TLS still
+verifies the URL's hostname; redirects re-checked (max 3), 2 MB cap, one 10 s
+budget for the whole chain, Accept-Encoding identity (no zip bombs), text pages
+only, text cut to page_text_max_chars=8000. Failures keep the Day 8 split.
+32 tests (148 total), no network: stub DNS/HTTP, a local TLS server, and a
+mutation check (re-resolving before connect fails the pinning test).
+UNVERIFIED until the first real call: Tavily's wire format (docs host blocked
+from the container). The pinned fetcher bypasses HTTP proxies by design.

@@ -10,6 +10,10 @@ Instead of an agent loop living in a process that dies when the process dies, ev
 
 *The demo page during run `783a03b3`: the worker that owned the run was killed with `docker kill` after step 3; another worker replayed the ledger and continued at step 4.*
 
+![Ops dashboard: runs, crash-resumes, spend, DLQ depth, the repair ladder and the must-stay-zero duplicate-effects card, all compiled from the ledger](learn/img/ops-dashboard.png)
+
+*The `/ops` page over this repo's own test history — 4,300+ runs of chaos/fencing/repair harnesses: 145 crash-resumes, the repair ladder's rungs, and `effects committed twice: 0`. Every number is aggregated from the `steps` table at request time; the same data ships as Prometheus metrics at `/metrics`.*
+
 ---
 
 ## Status
@@ -25,11 +29,19 @@ Instead of an agent loop living in a process that dies when the process dies, ev
 | Agent loop inside the workers | ✅ runs end to end: request → worker → ledger → stored record |
 | Transcript replay after a crash | ✅ working, verified with `docker kill` mid-run (evidence below) |
 | Idempotent write tools (per-tool key + unique constraint) | ✅ working, verified with `docker kill` inside `save_company` (evidence below) |
+| Client `Idempotency-Key` on `POST /v1/runs` | ✅ working, 7 tests incl. 8 racing retries → 1 run (evidence below) |
 | API key check, per-run budget cap | ✅ working (evidence below) |
-| Live demo page (`GET /`, polls the ledger once a second) | ✅ working, kill-and-resume shown live (screenshot above) |
-| SSRF guard on `fetch_page` (https only, resolved IPs must be public, redirects re-checked, max 3) | ✅ unit-tested (24 cases); DNS checks go live with the real fetcher |
+| Full API keys (prefix + bcrypt, 60 s verification cache), tenant scoping in a repository layer, per-tenant rate limit + concurrency cap | ✅ tested live + 7 tests (evidence below) |
+| Live demo page (`GET /`, pushed via SSE since Day 11, polling as fallback) | ✅ working, kill-and-resume shown live (screenshot above) |
+| SSRF guard on `fetch_page` (https only, resolved IPs must be public, redirects re-checked, max 3) | ✅ unit-tested (24 cases); applied with live DNS by the real fetcher |
+| Real tools behind `TOOLS_PROVIDER=real`: Tavily search + a pinned-IP page fetcher (closes DNS rebinding; 2 MB / 10 s / identity-encoding caps) | ✅ built, 32 tests with stub DNS/HTTP and a local TLS server; first real call pending a key (details: [`learn/REAL_TOOLS.md`](learn/REAL_TOOLS.md)) |
 | Retries with jittered backoff + per-tool circuit breaker (shared state in Postgres) | ✅ unit-tested (21 cases) + fault-injection runs (results below) |
 | Chaos harness and measured results | ✅ 200 runs (results below) |
+| Idempotency / fencing / throughput test suites (blueprint §13 A2–A4) | ✅ measured (results below) + 15 new tests |
+| Schema repair ladder (free JSON extraction → one model re-ask) | ✅ measured: 75/75 repairable broken finals saved (results below) |
+| Prometheus `/metrics` + `/ops` dashboard compiled from the ledger; OTel traces with `steps.trace_id` | ✅ working (screenshot above), 5 tests |
+| SSE for the demo page (LISTEN/NOTIFY push, fetch-streaming, polling fallback) | ✅ median 3.7 ms push latency, browser-tested, 5 tests |
+| Dead-letter queue (reaper for exhausted runs, `requeued` ledger marker, operator CLI) | ✅ measured: requeued runs resume from their ledger, 0 restarts (results below) |
 | Real model provider | 🔨 next (everything so far runs on a scripted fake model) |
 | Public deployment | ⬜ planned |
 
@@ -68,6 +80,34 @@ Instead of an agent loop living in a process that dies when the process dies, ev
 | Breaker recovery after the outage ended | closed itself via one probe |
 
 **Conditions:** fake model and tools with injected 503s, 3 workers, retries capped at 3 attempts with full-jitter backoff. These runs were executed against a local PostgreSQL 16 (in a development container, not Neon); the chaos-harness numbers above were measured on Neon. A worker killed with `kill -9` while retries were active (run `28ca2373`) was resumed by a second worker with no gaps and no repeated model calls. Raw numbers: [`chaos/fault_results.json`](chaos/fault_results.json); method: [`learn/DAY8.md`](learn/DAY8.md).
+
+`python -m chaos.idempotency_test`, `python -m chaos.fencing_test --n 100`, `python -m chaos.throughput_test` (Day 16): the three safety mechanisms, leaned on far harder than real traffic would.
+
+| Metric | Result |
+|---|---|
+| **A2 idempotency** — 300 keys × 4 processes racing the same `save_company` key (then again with the write window held open 20 ms, forcing full overlap), plus 200 writers `kill -9`'d mid-transaction | **500 / 500 keys executed exactly once**; 0 duplicate company rows; the write and its receipt never disagreed (they commit together); all racers got the same answer |
+| **A3 fencing** — the run's owner frozen with `SIGSTOP` at a random moment, another worker takes over, the zombie woken 0–2 s later; 100 iterations | 97 frozen mid-run, **97 / 97 succeeded, 0 finished by a stale worker**; stopped by the unique constraint ×81, the heartbeat ×14, the guarded finish ×2; in 16 runs the zombie's write landed first and the *new owner* was fenced — ledgers all valid either way |
+| A3 liveness note | 2 freezes landed inside a transaction, so the held row lock delayed takeover until wake-up (`SKIP LOCKED` skips locked rows); nothing duplicated — bounded in production by `idle_in_transaction_session_timeout` |
+| **A4 claim query** with 100,000 finished runs in the table | **0.111 ms** with the partial index; **8.4 ms** with it dropped (~76×) — finished runs are invisible to `runs_claimable_idx` |
+| **A4 throughput** at 0.2 s fake model latency | 1 → 16 workers: 1.18 → **18.4 runs/s (15.6×, 98% scaling efficiency)** on 4 CPUs — workers wait on the model, not the queue |
+| A4 throughput at 0 s latency (Relay's own overhead) | 37 runs/s on 1 worker; tops out ~179 runs/s at 8 workers on 4 CPUs |
+| Across all 2,430 sweep runs | 0 claimed twice, 0 ledger problems, all succeeded |
+
+**Conditions:** local PostgreSQL 16 in a cloud development container (not Neon), 4 CPUs, workers as plain processes (no Docker). `scripts/check_run.py` now also validates ledger *shape* (starts with `run_started`, every tool row answers the latest model call, nothing after the verdict). Raw numbers: [`chaos/idempotency_results.json`](chaos/idempotency_results.json), [`chaos/fencing_results.json`](chaos/fencing_results.json), [`chaos/throughput_results.json`](chaos/throughput_results.json); method: [`learn/DAY16.md`](learn/DAY16.md).
+
+`python -m chaos.repair_dlq_test --n 25 --exhausted-n 5` (Day 9): the repair ladder and the dead-letter queue, measured.
+
+| Metric | Result |
+|---|---|
+| Broken final answers a strict parser would have failed | 100 (25 each: code-fenced, prose-wrapped, invalid value, hopeless) |
+| Saved by the ladder | **75 / 75 of the repairable ones** — fenced + prose fixed free by JSON extraction, invalid values by exactly one re-asked model call each |
+| Repairs performed on clean runs | **0** of 25 (the ladder never fires for nothing) |
+| Hopeless answers | 25/25 failed honestly after exactly one re-ask — the ladder never loops |
+| Model 90% down → `model_unavailable` failures requeued via the DLQ | 24/24 requeued, then **25/25 succeeded**; every one **resumed from its ledger** (0 restarts), keeping the model calls paid before the outage |
+| Runs whose worker was `kill -9`'d on all 5 attempts | **5/5 swept to `dead` by the reaper**, requeued with a raised attempt ceiling, then succeeded |
+| Ledger problems across all 155 runs | **0** |
+
+**Conditions:** fake model/tools with injected breakage (`FAKE_BROKEN_FINAL`, `FAKE_MODEL_FAILURE_RATE`), local PostgreSQL 16 in a cloud container (not Neon), 3 process workers. Raw numbers: [`chaos/repair_dlq_results.json`](chaos/repair_dlq_results.json); method: [`learn/DAY9.md`](learn/DAY9.md).
 
 No accuracy numbers are published yet. They need a real model and a hand-labelled dataset.
 
@@ -130,7 +170,7 @@ The workload was chosen because it is multi-step (8–15 tool calls, so there is
 |---|---|
 | **Lease** | A claim on a run expires after 90 seconds unless the worker renews it. A dead worker needs no cleanup: the timestamp simply passes and the same query that claims fresh runs reclaims it. |
 | **Fencing** | `UNIQUE (run_id, step_index)` on the ledger. A stalled worker that wakes after its lease expired and tries to write a step the new owner already wrote gets a unique violation, recognises it was fenced, and aborts. Split-brain protection from a database constraint instead of a distributed lock service. |
-| **Idempotency** | Three overlapping layers: client `Idempotency-Key` (planned), a per-tool-invocation key written *before* execution, and a database uniqueness constraint on the output table (both built). The key is `<run_id>:<tool_call_id>`, so a re-run after a crash reuses it, and the write commits in the same transaction as the key's "done" mark. |
+| **Idempotency** | Three overlapping layers, all built: a client `Idempotency-Key` on `POST /v1/runs` (committed in the same transaction as the run it created), a per-tool-invocation key written *before* execution, and a database uniqueness constraint on the output table. The key is `<run_id>:<tool_call_id>`, so a re-run after a crash reuses it, and the write commits in the same transaction as the key's "done" mark. |
 | **Replay** | A new worker rebuilds the conversation by reading the ledger in order. Not code re-execution — the transcript was written down, so recovery is a `SELECT … ORDER BY` and a loop. |
 
 ### The agent loop
@@ -159,11 +199,17 @@ Manual tests against three worker containers and PostgreSQL on Neon. Run ids are
 
 `scripts/idempotency_smoke.py` exercises the same paths without workers: the same key twice is executed once, a second key for the same domain updates the one existing row, and a key left `in_flight` by a dead worker executes exactly once.
 
+**Client Idempotency-Key** — run `4f186a0d`: a `POST /v1/runs` sent twice with the same `Idempotency-Key` returned the same run id both times (the second with `Idempotent-Replayed: true`), the same key with a different domain got `422`, and the database held exactly one run. The key row commits in the same transaction as the run; 8 parallel retries with one key create exactly one run, and a replay is never refused by the concurrency cap (`tests/test_idempotency_key.py`, method: [`learn/IDEMPOTENCY_KEY.md`](learn/IDEMPOTENCY_KEY.md)).
+
 **API key** — every `/v1` route requires `Authorization: Bearer <key>`, compared in constant time. Without a key, with a wrong key, or without the `Bearer` scheme: `401`. With the key: `202`. `/healthz` stays open. If the server has no key configured, `/v1` answers `503` instead of running open.
+
+**Full API keys + tenancy (Day 10)** — keys are `rly_<prefix>.<secret>`: indexed prefix lookup in `api_keys`, bcrypt check of the secret, and the caller becomes a tenant whose id scopes every query (a repository layer makes the tenant id a required argument). Verified keys are cached 60 s as SHA-256 digests — measured live: first request 294 ms (bcrypt), second 7 ms. The single env key still works and maps to the dev tenant. Another tenant's run answers `404`, not `403`. Per-tenant limits (migration 005): requests/minute → `429` with Retry-After, and a max on concurrent runs enforced in Postgres under a per-tenant advisory lock — 8 racing creates against a cap of 3 produced exactly 3 runs (`tests/test_api_auth_tenancy.py`). Method and trade-offs (revocation lag, in-process rate window): [`learn/DAY10.md`](learn/DAY10.md).
 
 **Per-run budget** — run `e8280abe`, created with a budget of $0.0001 (below the cost of one fake model call, $0.004881): the first model call ran, the next turn's check wrote a `budget_exceeded` step, and the run ended `failed` with exactly one `model_call` in its ledger. Spend is summed from the ledger's `model_call` rows, so the cap survives crashes and replays; it can overshoot by at most one call, whose cost is only known after it returns. A normal run (`272f1414`) costs $0.026 in fake prices against the default $0.25.
 
 **Live demo page** — run `783a03b3`, started from the page at `GET /`: worker `20a728` wrote steps 1–3, was killed with the `docker kill` command the page displays, and worker `0f4d83` took over at step 4 (attempt 2). The page showed the takeover banner, the per-worker badges, the final record and the saved company row. The page is one static HTML file polling `GET /v1/runs/{id}` and `GET /v1/runs/{id}/steps` once a second; it holds no API key and renders ledger text as plain text only.
+
+**SSE push (Day 11)** — a trigger rings `pg_notify` on every ledger commit (migration 006; commit-transactional, so a fenced zombie's rolled-back insert rings nothing), and `GET /v1/runs/{id}/events` streams `update` events re-read through the tenant-scoped repository. The page consumes it with fetch-streaming (EventSource can't send the Authorization header) and falls back to the old polling automatically. Measured over 5 live worker runs: 65 steps pushed at **median 3.7 ms / p90 6.7 ms** from insert commit to parsed client event (local Postgres; polling at 1 s averaged ~500 ms). Browser-verified with Playwright: a full run streamed with zero console errors. Method: [`learn/DAY11.md`](learn/DAY11.md).
 
 `scripts/check_run.py` checks every run above for index gaps and repeated model calls. The "already finished" and "already failed" replay paths are covered by unit tests (`tests/test_replay.py`) but haven't been hit live.
 
@@ -194,9 +240,9 @@ Relay is also **not a Temporal clone**. It is a deliberately minimal, Postgres-o
 
 ## Stack
 
-Python 3.13 · FastAPI · Pydantic v2 · psycopg 3 (raw SQL, no ORM) · Alembic · PostgreSQL (Neon) · Docker Compose
+Python 3.13 · FastAPI · Pydantic v2 · psycopg 3 (raw SQL, no ORM) · Alembic · PostgreSQL (Neon) · Docker Compose · prometheus-client · OpenTelemetry SDK
 
-Planned: Redis, OpenTelemetry, Prometheus, Grafana, Caddy, AWS EC2.
+Planned: Grafana + an OTLP collector (the config file is in the repo), Caddy, AWS EC2. Redis stays out until a measured need appears.
 
 **On model spend:** development runs against a scripted fake model client and fake tools (canned search results and pages) behind the same `LLMClient` interface a real provider will use, so durability work costs nothing to test. The fake is deterministic and chooses its reply from the conversation it is handed rather than from internal state — meaning a fresh worker resuming after a crash gets the same reply the dead one would have. The chaos harness ran on the fake client, because it measures crash recovery rather than model quality; this is stated next to the numbers.
 
@@ -204,8 +250,8 @@ Planned: Redis, OpenTelemetry, Prometheus, Grafana, Caddy, AWS EC2.
 
 ## Roadmap
 
-Currently implements durable execution, lease-based claiming with fencing, transcript replay, tool-level idempotency with a database backstop, an API key and per-run budget, a live demo page, and measured chaos-harness results.
+Currently implements durable execution, lease-based claiming with fencing, transcript replay, tool-level idempotency with a database backstop, full per-tenant API keys with rate and concurrency limits, a per-run budget, a repair ladder and dead-letter queue, a live demo page, and measured chaos-harness results.
 
 Next, in order: the switch from the fake model to a real provider (with real search and page fetch); public deployment; then a hand-labelled golden dataset with LLM-as-judge evaluation gated in CI.
 
-Later: a schema-repair ladder with model escalation, and OpenTelemetry GenAI tracing. Per-tool circuit breakers and retry-with-backoff landed with Day 8 (see Measured results).
+Per-tool circuit breakers and retry-with-backoff landed with Day 8, the idempotency / fencing / throughput test suites with Day 16, the schema repair ladder + dead-letter queue with Day 9, and Prometheus metrics + OpenTelemetry tracing + the `/ops` dashboard with Day 17. The ladder's last rung — escalating to a *stronger* model — waits for the real-model switch; Grafana and the OTLP collector come with deployment.

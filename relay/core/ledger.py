@@ -7,6 +7,7 @@ import psycopg
 from psycopg.types.json import Jsonb
 
 from relay.db import pool
+from relay.obs.tracing import current_trace_id
 
 
 class LeaseLost(Exception):
@@ -39,10 +40,12 @@ def append_step(
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    INSERT INTO steps (run_id, step_index, kind, payload, written_by)
-                    VALUES (%s, %s, %s, %s, %s)
+                    INSERT INTO steps (run_id, step_index, kind, payload, written_by, trace_id)
+                    VALUES (%s, %s, %s, %s, %s, %s)
                     """,
-                    (run_id, step_index, kind, Jsonb(payload), written_by),
+                    # Day 17: the active span's trace id, so a ledger row and its
+                    # trace point at each other. NULL outside a span (scripts).
+                    (run_id, step_index, kind, Jsonb(payload), written_by, current_trace_id()),
                 )
     except psycopg.errors.UniqueViolation as exc:
         raise LeaseLost(f"step {step_index} of run {run_id} already written") from exc

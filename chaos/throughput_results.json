@@ -1,0 +1,272 @@
+{
+  "conditions": {
+    "model": "scripted fake (4 model calls, 4 tool calls per run)",
+    "lease_seconds": 30,
+    "batch": "runs enqueued in one commit; wall = first created_at to last finished_at",
+    "machine_cpus": 4
+  },
+  "claim_query": {
+    "rows_already_in_table": 1633,
+    "finished_runs_added": 100000,
+    "repeats": 25,
+    "claim_before_backlog": {
+      "execution_ms_median": 0.052,
+      "execution_ms_p90": 0.092,
+      "uses_runs_claimable_idx": true
+    },
+    "claim_with_backlog_partial_index": {
+      "execution_ms_median": 0.111,
+      "execution_ms_p90": 0.151,
+      "uses_runs_claimable_idx": true
+    },
+    "claim_with_backlog_index_dropped": {
+      "execution_ms_median": 8.404,
+      "execution_ms_p90": 13.693,
+      "uses_runs_claimable_idx": false
+    }
+  },
+  "sweep": [
+    {
+      "workers": 1,
+      "fake_model_latency_s": 0.0,
+      "runs": 300,
+      "statuses": {
+        "succeeded": 300
+      },
+      "wall_s": 8.11,
+      "runs_per_s": 37.0,
+      "steps_per_s": 518.0,
+      "run_duration_s": {
+        "p50": 0.024,
+        "p95": 0.036
+      },
+      "runs_claimed_more_than_once": 0,
+      "workers_that_did_work": 1,
+      "runs_per_worker_min_max": [
+        300,
+        300
+      ],
+      "runs_with_ledger_problems": 0,
+      "speedup_vs_1_worker": 1.0,
+      "scaling_efficiency": 1.0
+    },
+    {
+      "workers": 2,
+      "fake_model_latency_s": 0.0,
+      "runs": 300,
+      "statuses": {
+        "succeeded": 300
+      },
+      "wall_s": 4.08,
+      "runs_per_s": 73.45,
+      "steps_per_s": 1028.2,
+      "run_duration_s": {
+        "p50": 0.023,
+        "p95": 0.035
+      },
+      "runs_claimed_more_than_once": 0,
+      "workers_that_did_work": 2,
+      "runs_per_worker_min_max": [
+        147,
+        153
+      ],
+      "runs_with_ledger_problems": 0,
+      "speedup_vs_1_worker": 1.99,
+      "scaling_efficiency": 0.99
+    },
+    {
+      "workers": 4,
+      "fake_model_latency_s": 0.0,
+      "runs": 300,
+      "statuses": {
+        "succeeded": 300
+      },
+      "wall_s": 2.49,
+      "runs_per_s": 120.68,
+      "steps_per_s": 1689.6,
+      "run_duration_s": {
+        "p50": 0.026,
+        "p95": 0.038
+      },
+      "runs_claimed_more_than_once": 0,
+      "workers_that_did_work": 4,
+      "runs_per_worker_min_max": [
+        74,
+        76
+      ],
+      "runs_with_ledger_problems": 0,
+      "speedup_vs_1_worker": 3.26,
+      "scaling_efficiency": 0.82
+    },
+    {
+      "workers": 8,
+      "fake_model_latency_s": 0.0,
+      "runs": 300,
+      "statuses": {
+        "succeeded": 300
+      },
+      "wall_s": 1.68,
+      "runs_per_s": 178.64,
+      "steps_per_s": 2500.9,
+      "run_duration_s": {
+        "p50": 0.036,
+        "p95": 0.051
+      },
+      "runs_claimed_more_than_once": 0,
+      "workers_that_did_work": 8,
+      "runs_per_worker_min_max": [
+        26,
+        42
+      ],
+      "runs_with_ledger_problems": 0,
+      "speedup_vs_1_worker": 4.83,
+      "scaling_efficiency": 0.6
+    },
+    {
+      "workers": 16,
+      "fake_model_latency_s": 0.0,
+      "runs": 300,
+      "statuses": {
+        "succeeded": 300
+      },
+      "wall_s": 1.97,
+      "runs_per_s": 152.09,
+      "steps_per_s": 2129.3,
+      "run_duration_s": {
+        "p50": 0.076,
+        "p95": 0.117
+      },
+      "runs_claimed_more_than_once": 0,
+      "workers_that_did_work": 16,
+      "runs_per_worker_min_max": [
+        16,
+        27
+      ],
+      "runs_with_ledger_problems": 0,
+      "speedup_vs_1_worker": 4.11,
+      "scaling_efficiency": 0.26
+    },
+    {
+      "workers": 1,
+      "fake_model_latency_s": 0.2,
+      "runs": 30,
+      "statuses": {
+        "succeeded": 30
+      },
+      "wall_s": 25.52,
+      "runs_per_s": 1.18,
+      "steps_per_s": 16.5,
+      "run_duration_s": {
+        "p50": 0.84,
+        "p95": 0.852
+      },
+      "runs_claimed_more_than_once": 0,
+      "workers_that_did_work": 1,
+      "runs_per_worker_min_max": [
+        30,
+        30
+      ],
+      "runs_with_ledger_problems": 0,
+      "speedup_vs_1_worker": 1.0,
+      "scaling_efficiency": 1.0
+    },
+    {
+      "workers": 2,
+      "fake_model_latency_s": 0.2,
+      "runs": 60,
+      "statuses": {
+        "succeeded": 60
+      },
+      "wall_s": 25.61,
+      "runs_per_s": 2.34,
+      "steps_per_s": 32.8,
+      "run_duration_s": {
+        "p50": 0.84,
+        "p95": 0.866
+      },
+      "runs_claimed_more_than_once": 0,
+      "workers_that_did_work": 2,
+      "runs_per_worker_min_max": [
+        30,
+        30
+      ],
+      "runs_with_ledger_problems": 0,
+      "speedup_vs_1_worker": 1.98,
+      "scaling_efficiency": 0.99
+    },
+    {
+      "workers": 4,
+      "fake_model_latency_s": 0.2,
+      "runs": 120,
+      "statuses": {
+        "succeeded": 120
+      },
+      "wall_s": 25.55,
+      "runs_per_s": 4.7,
+      "steps_per_s": 65.7,
+      "run_duration_s": {
+        "p50": 0.839,
+        "p95": 0.849
+      },
+      "runs_claimed_more_than_once": 0,
+      "workers_that_did_work": 4,
+      "runs_per_worker_min_max": [
+        30,
+        30
+      ],
+      "runs_with_ledger_problems": 0,
+      "speedup_vs_1_worker": 3.98,
+      "scaling_efficiency": 1.0
+    },
+    {
+      "workers": 8,
+      "fake_model_latency_s": 0.2,
+      "runs": 240,
+      "statuses": {
+        "succeeded": 240
+      },
+      "wall_s": 25.83,
+      "runs_per_s": 9.29,
+      "steps_per_s": 130.1,
+      "run_duration_s": {
+        "p50": 0.841,
+        "p95": 0.854
+      },
+      "runs_claimed_more_than_once": 0,
+      "workers_that_did_work": 8,
+      "runs_per_worker_min_max": [
+        30,
+        30
+      ],
+      "runs_with_ledger_problems": 0,
+      "speedup_vs_1_worker": 7.87,
+      "scaling_efficiency": 0.98
+    },
+    {
+      "workers": 16,
+      "fake_model_latency_s": 0.2,
+      "runs": 480,
+      "statuses": {
+        "succeeded": 480
+      },
+      "wall_s": 26.05,
+      "runs_per_s": 18.43,
+      "steps_per_s": 258.0,
+      "run_duration_s": {
+        "p50": 0.843,
+        "p95": 0.867
+      },
+      "runs_claimed_more_than_once": 0,
+      "workers_that_did_work": 16,
+      "runs_per_worker_min_max": [
+        30,
+        30
+      ],
+      "runs_with_ledger_problems": 0,
+      "speedup_vs_1_worker": 15.62,
+      "scaling_efficiency": 0.98
+    }
+  ],
+  "elapsed_s": 169.9,
+  "environment_note": "local Postgres 16 in a cloud container (not Neon), 4 CPUs; Docker-less workers as plain processes"
+}

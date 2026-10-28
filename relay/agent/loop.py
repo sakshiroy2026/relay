@@ -16,8 +16,10 @@ TOUCHES     The steps table: one read (replay_ledger), then writes via
             model call, runs.spent_usd / tokens are refreshed from the ledger.
 FAILS WHEN  heartbeat() is False or a step index is taken -> LeaseLost is
             raised for the worker to handle. Model mistakes never raise: bad
-            tool calls come back as ok=False observations; a bad final answer
-            or MAX_TURNS without one -> `error` step and None. Spend already
+            tool calls come back as ok=False observations; a final answer that
+            fails validation goes through the repair ladder (Day 9: free JSON
+            extraction, then one re-asked model call) before it becomes an
+            `error` step and None; MAX_TURNS without one -> `error` and None. Spend already
             at or over budget_usd before a model call -> `budget_exceeded`
             step and None (one call can overshoot: its cost is only known after).
             A model call still transiently failing after 3 tries -> `error`
@@ -30,19 +32,18 @@ from dataclasses import asdict
 from typing import Any
 from uuid import UUID
 
-from pydantic import ValidationError
-
 from relay.agent.prompts import SYSTEM_PROMPT
-from relay.agent.schemas import CompanyRecord
 from relay.agent.tools import TOOL_SCHEMAS, ToolContext, dispatch_tool
 from relay.config import settings
 from relay.core.costs import refresh_run_totals
 from relay.core.ledger import LeaseLost, append_step
+from relay.core.repair import correction_message, parse_final
 from relay.core.replay import replay_ledger
 from relay.core.retry import FatalError, RetryableError, call_with_retries
 from relay.llm.client import ToolCall
 from relay.llm.factory import make_llm
 from relay.llm.pricing import price
+from relay.obs.tracing import tracer
 
 MAX_TURNS = 15  # counts model_call rows already in the ledger, not just this worker's
 MODEL_RETRY_ATTEMPTS = 3  # tries per model call (Day 8); only transient failures are retried
@@ -70,7 +71,11 @@ def _run_tool(
         worker_id,
     )
 
-    outcome = dispatch_tool(tc.name, tc.args, ctx)
+    with tracer().start_as_current_span(
+        f"relay.tool {tc.name}", attributes={"relay.tool": tc.name}
+    ) as span:
+        outcome = dispatch_tool(tc.name, tc.args, ctx)
+        span.set_attributes({"relay.ok": outcome.ok, "relay.attempts": outcome.attempts})
 
     index = append_step(
         run_id,
@@ -93,22 +98,43 @@ def _run_tool(
     return index
 
 
-def _judge(run_id: UUID, index: int, content: str, worker_id: str) -> dict[str, Any] | None:
-    """Validate a final answer -> `final` step + record, or `error` step + None."""
-    try:
-        record = CompanyRecord.model_validate_json(content)
-    except ValidationError as exc:
-        append_step(
-            run_id,
-            index,
-            "error",
-            {"reason": "invalid_final_answer", "detail": str(exc)},
-            worker_id,
+def _judge(
+    run_id: UUID,
+    index: int,
+    content: str,
+    worker_id: str,
+    messages: list[dict[str, Any]],
+    repairs_used: int,
+) -> tuple[str, dict[str, Any] | None, int]:
+    """Judge a final answer through the repair ladder (Day 9).
+
+    Returns ("final", record, next_index)   — validated, `final` written;
+            ("repair", None, next_index)    — a `repair_requested` row and the
+              correction message were written; the caller's next model call is
+              the rung-2 re-ask;
+            ("error", None, next_index)     — out of rungs; `error` written.
+    """
+    record, repaired_by, errors = parse_final(content)  # rungs 0 and 1
+    if record is not None:
+        result = record.model_dump(mode="json")
+        # how it was salvaged goes to the ledger, not into the run's result
+        tags = ([repaired_by] if repaired_by else []) + (["model_reask"] if repairs_used else [])
+        payload = {**result, "repaired_by": tags} if tags else result
+        index = append_step(run_id, index, "final", payload, worker_id)
+        return "final", result, index
+
+    if repairs_used < settings.repair_attempts:  # rung 2: one re-ask, paid like any turn
+        message = correction_message(errors)
+        index = append_step(
+            run_id, index, "repair_requested", {"message": message, "errors": errors}, worker_id
         )
-        return None
-    result = record.model_dump(mode="json")
-    append_step(run_id, index, "final", result, worker_id)
-    return result
+        messages.append({"role": "user", "content": message})
+        return "repair", None, index
+
+    index = append_step(
+        run_id, index, "error", {"reason": "invalid_final_answer", "detail": errors}, worker_id
+    )
+    return "error", None, index
 
 
 def run_agent(
@@ -133,9 +159,15 @@ def run_agent(
     messages = list(state.messages)
     index = state.next_index
     spent = state.spent_usd  # from the ledger, so a resumed run keeps counting
+    repairs_used = state.repairs_used  # re-asks are counted from the ledger too
 
     if state.unjudged_answer is not None:  # died after the last model_call, before judging it
-        return _judge(run_id, index, state.unjudged_answer, worker_id)
+        outcome, result, index = _judge(
+            run_id, index, state.unjudged_answer, worker_id, messages, repairs_used
+        )
+        if outcome != "repair":
+            return result  # the record, or None for the error case
+        repairs_used += 1  # fall through: the loop's next model call is the re-ask
 
     # --- Died mid-tool: run what the last reply asked for but never got back ---
     for tc in state.pending_tool_calls:
@@ -162,15 +194,26 @@ def run_agent(
         # heartbeat is needed. A model down for longer fails the run with an
         # `error` step; nothing is charged for calls that never happened.
         try:
-            response, attempts = call_with_retries(
-                lambda: llm.call(
-                    model=settings.model_planner,
-                    system=SYSTEM_PROMPT,
-                    messages=messages,
-                    tools=TOOL_SCHEMAS,
-                ),
-                attempts=MODEL_RETRY_ATTEMPTS,
-            )
+            with tracer().start_as_current_span(
+                "relay.model_call",
+                attributes={"gen_ai.request.model": settings.model_planner, "relay.turn": turn},
+            ) as span:
+                response, attempts = call_with_retries(
+                    lambda: llm.call(
+                        model=settings.model_planner,
+                        system=SYSTEM_PROMPT,
+                        messages=messages,
+                        tools=TOOL_SCHEMAS,
+                    ),
+                    attempts=MODEL_RETRY_ATTEMPTS,
+                )
+                span.set_attributes(
+                    {
+                        "gen_ai.usage.input_tokens": response.input_tokens,
+                        "gen_ai.usage.output_tokens": response.output_tokens,
+                        "relay.attempts": attempts,
+                    }
+                )
         except RetryableError as exc:  # still failing after every attempt
             append_step(
                 run_id,
@@ -211,9 +254,15 @@ def run_agent(
             }
         )
 
-        # --- G: final answer? Judge it and stop. ---
+        # --- G: final answer? Judge it through the repair ladder. ---
         if response.stop_reason == "end_turn":
-            return _judge(run_id, index, response.content, worker_id)
+            outcome, result, index = _judge(
+                run_id, index, response.content, worker_id, messages, repairs_used
+            )
+            if outcome != "repair":
+                return result
+            repairs_used += 1
+            continue  # the next turn is the rung-2 re-ask
 
         # --- H, F, A, K: for each tool the model asked for ---
         for tc in response.tool_calls:

@@ -12,8 +12,10 @@ from psycopg.types.json import Jsonb
 
 from relay.agent.loop import run_agent
 from relay.config import settings
+from relay.core.dlq import reap_exhausted
 from relay.core.ledger import LeaseLost
 from relay.db import pool
+from relay.obs.tracing import setup, tracer
 
 # ── 1. settings ──────────────────────────────────────────────────────────
 LEASE_SECONDS = settings.lease_seconds
@@ -115,8 +117,19 @@ def run_once() -> bool:
     def beat() -> bool:  # F — handed to the loop, called at the top of every turn
         return extend_lease(run_id)
 
+    # Day 17: one trace per run ATTEMPT (a reclaimed run starts a new trace;
+    # the ledger ties the attempts together via run_id).
     try:
-        result = run_agent(run_id, domain, WORKER_ID, beat, budget_usd)  # A
+        with tracer().start_as_current_span(
+            "relay.run_attempt",
+            attributes={
+                "relay.run_id": str(run_id),
+                "relay.attempt": run["attempt_count"],
+                "relay.worker_id": WORKER_ID,
+            },
+        ) as span:
+            result = run_agent(run_id, domain, WORKER_ID, beat, budget_usd)  # A
+            span.set_attribute("relay.outcome", "failed" if result is None else "succeeded")
     except LeaseLost as exc:  # D
         print(f"[{WORKER_ID}] lease_lost {str(run_id)[:8]}: {exc}", flush=True)
         return True
@@ -137,6 +150,7 @@ def run_once() -> bool:
 
 # ── 6. the poll loop ─────────────────────────────────────────────────────
 def main() -> None:
+    setup("relay-worker")
     print(f"[{WORKER_ID}] started", flush=True)
     try:
         while True:
@@ -148,6 +162,10 @@ def main() -> None:
                 continue
 
             if not did_work:
+                # Day 9: an idle moment is when exhausted runs are swept to the
+                # DLQ — one indexed UPDATE that usually matches nothing.
+                for dead_id in reap_exhausted(WORKER_ID):
+                    print(f"[{WORKER_ID}] dead-lettered {dead_id}: attempts exhausted", flush=True)
                 time.sleep(POLL_INTERVAL_SECONDS)
     except KeyboardInterrupt:
         print(f"[{WORKER_ID}] stopping", flush=True)

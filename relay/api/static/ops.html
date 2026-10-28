@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Relay — ops</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --ink: #1c2330; --muted: #667085; --line: #e3e7ee;
+    --accent: #2f6fed; --ok: #13804b; --bad: #c2352b; --warn: #b45309;
+    --chip: #eef1f6; --mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f131a; --panel: #171c25; --ink: #e6e9ef; --muted: #98a2b3; --line: #273041;
+      --accent: #6c9bff; --ok: #3ccf87; --bad: #ff6b5f; --warn: #ffb64d; --chip: #222a37;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { display: flex; flex-wrap: wrap; gap: 10px 24px; align-items: baseline;
+           padding: 16px 24px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  header h1 { margin: 0; font-size: 20px; }
+  header .tag { color: var(--muted); font-size: 13px; }
+  header .asof { margin-left: auto; color: var(--muted); font-size: 13px; font-family: var(--mono); }
+  main { max-width: 1180px; margin: 0 auto; padding: 20px 16px 48px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .stat .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .6px; }
+  .stat .value { font-size: 26px; font-weight: 650; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .stat .sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .stat.good .value { color: var(--ok); }
+  .stat.bad .value { color: var(--bad); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 16px; }
+  h2 { font-size: 13px; margin: 0 0 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  td { padding: 5px 4px; border-top: 1px solid var(--line); }
+  td.n { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .rowbar { height: 5px; border-radius: 3px; background: var(--chip); overflow: hidden; margin-top: 3px; }
+  .rowbar > div { height: 100%; background: var(--accent); }
+  .pill { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: 13px; font-weight: 600; background: var(--chip); }
+  .pill.closed { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
+  .pill.open { background: color-mix(in srgb, var(--bad) 18%, transparent); color: var(--bad); }
+  .pill.half_open { background: color-mix(in srgb, var(--warn) 20%, transparent); color: var(--warn); }
+  .muted { color: var(--muted); }
+  footer { max-width: 1180px; margin: 0 auto; padding: 0 16px 24px; color: var(--muted); font-size: 12.5px; }
+  code { font-family: var(--mono); background: var(--chip); padding: 1px 6px; border-radius: 6px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Relay ops</h1>
+  <span class="tag">read straight from the ledger — the steps table is the trace</span>
+  <span class="asof" id="asof">loading…</span>
+</header>
+<main>
+  <div class="cards" id="cards"></div>
+  <div class="grid">
+    <section class="panel"><h2>Runs by status</h2><table id="runs"></table></section>
+    <section class="panel"><h2>Ledger rows by kind</h2><table id="steps"></table></section>
+    <section class="panel">
+      <h2>Tool calls &amp; retries</h2><table id="tools"></table>
+      <h2 style="margin-top:14px">Circuit breakers</h2><table id="breakers"></table>
+    </section>
+    <section class="panel">
+      <h2>Repair ladder</h2><table id="repairs"></table>
+      <h2 style="margin-top:14px">Error reasons</h2><table id="errors"></table>
+    </section>
+  </div>
+</main>
+<footer>
+  Polls <code>/ops.json</code> every 2&nbsp;s · the same numbers ship as Prometheus metrics at
+  <code>/metrics</code> · traces carry <code>steps.trace_id</code> (OTLP when
+  <code>OTEL_EXPORTER_OTLP_ENDPOINT</code> is set)
+</footer>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const fmt = n => n.toLocaleString("en-US");
+
+function card(label, value, sub, cls) {
+  return `<div class="panel stat ${cls || ""}"><div class="label">${label}</div>` +
+         `<div class="value">${value}</div><div class="sub">${sub || ""}</div></div>`;
+}
+
+function table(el, entries, pillClass) {
+  const total = entries.reduce((a, [, n]) => a + (typeof n === "number" ? n : 0), 0) || 1;
+  el.innerHTML = entries.length ? entries.map(([k, n]) => {
+    const val = typeof n === "number"
+      ? `<td class="n">${fmt(n)}</td>`
+      : `<td class="n"><span class="pill ${pillClass ? n : ""}">${n}</span></td>`;
+    const bar = typeof n === "number"
+      ? `<div class="rowbar"><div style="width:${Math.round(100 * n / total)}%"></div></div>` : "";
+    return `<tr><td>${k}${bar}</td>${val}</tr>`;
+  }).join("") : `<tr><td class="muted">nothing yet</td></tr>`;
+}
+
+async function refresh() {
+  let s;
+  try { s = await (await fetch("/ops.json")).json(); }
+  catch { $("asof").textContent = "API unreachable — retrying"; return; }
+
+  const runs = s.runs, done = (runs.succeeded || 0), all = Object.values(runs).reduce((a, b) => a + b, 0);
+  const saved = Object.values(s.repaired_finals).reduce((a, b) => a + b, 0);
+  $("cards").innerHTML =
+    card("runs", fmt(all), `${fmt(done)} succeeded`) +
+    card("resumed after a crash", fmt(s.resumed_runs), "succeeded on attempt &gt; 1", "good") +
+    card("model spend", "$" + s.spend_usd.toFixed(4), `${fmt(s.tokens.in + s.tokens.out)} tokens`) +
+    card("live leases", fmt(s.open_leases), "runs owned right now") +
+    card("DLQ depth", fmt(s.dlq_depth), "failed + dead (requeue candidates)", s.dlq_depth ? "bad" : "good") +
+    card("finals repaired", fmt(saved), "saved by the ladder", saved ? "good" : "") +
+    card("effects committed twice", fmt(s.write_effects.executed_twice), "must stay 0",
+         s.write_effects.executed_twice ? "bad" : "good");
+
+  table($("runs"), Object.entries(runs).sort((a, b) => b[1] - a[1]));
+  table($("steps"), Object.entries(s.steps).sort((a, b) => b[1] - a[1]));
+  const retries = Object.entries(s.tool_retry_attempts).sort()
+    .map(([a, n]) => [`took ${a} attempt${a === "1" ? "" : "s"}`, n]);
+  table($("tools"), Object.entries(s.tool_calls).sort().concat(retries));
+  table($("breakers"), Object.entries(s.breakers), true);
+  table($("repairs"), Object.entries(s.repaired_finals));
+  table($("errors"), Object.entries(s.error_reasons).sort((a, b) => b[1] - a[1]));
+  $("asof").textContent = new Date(s.generated_at * 1000).toLocaleTimeString();
+}
+
+refresh();
+setInterval(refresh, 2000);
+</script>
+</body>
+</html>

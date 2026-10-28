@@ -1,7 +1,9 @@
 """The agent's toolbox: five tools, a registry, and one dispatcher.
 
 WHAT IT IS  Everything the model is allowed to do. External tools (web_search,
-            fetch_page) are fake today; internal tools (lookup_existing,
+            fetch_page) are fake by default; TOOLS_PROVIDER=real swaps in Tavily
+            search and the pinned-IP fetcher (relay/agent/real_tools.py) under
+            the same names and schemas. Internal tools (lookup_existing,
             save_company, flag_for_review) touch Relay's own database.
 GOES IN     dispatch_tool(name, args, ctx): the tool the model asked for, its raw
             args, and a ToolContext (which run, its domain, this call's
@@ -25,6 +27,7 @@ import psycopg
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel, Field, HttpUrl, ValidationError
 
+from relay.agent.errors import ToolError  # re-exported: callers import it from here
 from relay.agent.schemas import CompanyRecord, PageText, SearchResult
 from relay.agent.ssrf import UnsafeURL, check_url
 from relay.config import settings
@@ -34,10 +37,6 @@ from relay.core.retry import RetryableError, call_with_retries
 from relay.db import pool
 
 TOOL_RETRY_ATTEMPTS = 3  # tries per tool call; sleeps at most ~3 s in total (see retry.py)
-
-
-class ToolError(Exception):
-    """An expected tool failure (page not found, site down). Shown to the model, not a crash."""
 
 
 @dataclass(frozen=True)
@@ -279,9 +278,44 @@ _INTERNAL_TOOLS = (
 )
 
 
+# ── The real internet (tools_provider = "real", P2) ─────────────────────
+def _real_web_search(args: WebSearchInput, _ctx: ToolContext | None) -> str:
+    from relay.agent import real_tools
+
+    key = settings.tavily_api_key or ""  # presence is checked when the registry is built
+    results = real_tools.tavily_search(args.query.strip(), key)
+    return json.dumps([r.model_dump(mode="json") for r in results])
+
+
+def _real_fetch_page(args: FetchPageInput, _ctx: ToolContext | None) -> str:
+    from relay.agent import real_tools
+
+    try:
+        page = real_tools.fetch_page(str(args.url), settings.page_text_max_chars)
+    except UnsafeURL as exc:
+        raise ToolError(str(exc)) from exc
+    return page.model_dump_json()
+
+
+# Same names, descriptions and input models as the fake pair: the model sees an
+# identical menu whichever provider is configured.
+_REAL_RUNS: dict[str, Callable[[Any, ToolContext | None], str]] = {
+    "web_search": _real_web_search,
+    "fetch_page": _real_fetch_page,
+}
+_REAL_TOOLS = tuple(
+    Tool(name=t.name, description=t.description, input_model=t.input_model, run=_REAL_RUNS[t.name])
+    for t in _FAKE_TOOLS
+)
+
+
 def _build_registry() -> dict[str, Tool]:
     if settings.tools_provider == "fake":
         return {tool.name: tool for tool in (*_FAKE_TOOLS, *_INTERNAL_TOOLS)}
+    if settings.tools_provider == "real":
+        if not settings.tavily_api_key:  # fail at boot, not in the middle of a paid run
+            raise RuntimeError("TOOLS_PROVIDER=real needs TAVILY_API_KEY in the environment")
+        return {tool.name: tool for tool in (*_REAL_TOOLS, *_INTERNAL_TOOLS)}
     raise RuntimeError(f"no tools for provider {settings.tools_provider!r}")
 
 

@@ -1,4 +1,10 @@
-"""The fake model's lines for one enrichment run: search → fetch x2 → save → final record."""
+"""The fake model's lines for one enrichment run: search → fetch x2 → save → final record.
+
+enrich_script(broken_final) can break the final answer on purpose (Day 9 proofs):
+the record is wrapped in noise or given an invalid value, and one corrected reply
+is appended for the repair ladder's re-ask. Everything stays deterministic and
+turn-counted, so a resumed run gets the same replies the dead worker would have.
+"""
 
 import json
 
@@ -48,3 +54,29 @@ ENRICH_SCRIPT: list[ScriptedReply] = [
         tool_calls=[],
     ),
 ]
+
+
+def enrich_script(broken_final: str = "") -> list[ScriptedReply]:
+    """The script, optionally with a broken final answer (settings.fake_broken_final).
+
+    fenced    — the right record inside a markdown code fence (rung 1 fixes it)
+    prose     — the right record wrapped in chat prose (rung 1 fixes it)
+    bad_year  — valid JSON, founded_year 1599 fails validation (only rung 2 can fix it)
+    hopeless  — no JSON at all, and the re-ask reply is no better (the ladder gives up)
+    """
+    if not broken_final:
+        return ENRICH_SCRIPT
+
+    good = json.dumps(_FINAL_RECORD)
+    broken = {
+        "fenced": f"```json\n{good}\n```",
+        "prose": f"Here is the finished record for you:\n{good}\nLet me know if anything is off.",
+        "bad_year": json.dumps({**_FINAL_RECORD, "founded_year": 1599}),
+        "hopeless": "I was unable to assemble the record from the sources.",
+    }[broken_final]
+    reask_reply = (
+        "I still cannot produce a valid record."  # distinct text: two identical end_turn
+        if broken_final == "hopeless"  # replies would (rightly) trip check_run
+        else good
+    )
+    return [*ENRICH_SCRIPT[:3], ScriptedReply(content=broken), ScriptedReply(content=reask_reply)]

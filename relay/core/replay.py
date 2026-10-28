@@ -6,10 +6,13 @@ WHAT IT IS  The shift-handover read of the chart. A worker that claims a run
 GOES IN     rebuild_messages: the run's step rows (step_index, kind, payload),
             already sorted by step_index. replay_ledger: a run_id.
 COMES OUT   A ReplayState: the messages, the next free step index, how many
-            model turns are already used and what they cost, tool calls that
-            were asked for but never confirmed, and whether the run already has
-            a verdict (`final` payload, `error` / `budget_exceeded`, or an
-            end_turn reply not yet judged).
+            model turns are already used and what they cost, how many repair
+            re-asks were already spent (Day 9), tool calls that were asked for
+            but never confirmed, and whether the run already has a verdict
+            (`final` payload, `error` / `budget_exceeded`, or an end_turn
+            reply not yet judged). A `requeued` row (Day 9) clears the verdict
+            before it: the run was put back in the queue by an operator and
+            continues from its ledger instead of restarting.
 TOUCHES     replay_ledger: ONE read of the steps table. rebuild_messages:
             nothing (pure function, testable without a database).
 FAILS WHEN  The ledger has no run_started row, or a row kind it doesn't know
@@ -37,9 +40,10 @@ class ReplayState:
     next_index: int  # last step_index + 1
     turns_used: int  # model_call rows already in the ledger
     spent_usd: float = 0.0  # sum of cost_usd over those model_call rows (the budget's truth)
+    repairs_used: int = 0  # repair_requested rows: re-asks already spent (Day 9)
     pending_tool_calls: list[ToolCall] = field(default_factory=list)  # asked, never confirmed
     final: dict[str, Any] | None = None  # payload of a `final` row: the run is already done
-    failed: bool = False  # an `error` or `budget_exceeded` row exists: the run already failed
+    failed: bool = False  # an `error` / `budget_exceeded` row with no `requeued` row after it
     unjudged_answer: str | None = None  # last reply was end_turn, died before final/error
 
 
@@ -50,6 +54,8 @@ def rebuild_messages(rows: Sequence[Mapping[str, Any]]) -> ReplayState:
     messages: list[dict[str, Any]] = []
     turns_used = 0
     spent = 0.0
+    repairs = 0
+    failed = False  # an error / budget_exceeded row with no requeued row after it
     last_reply: Mapping[str, Any] | None = None  # payload of the latest model_call
     confirmed: set[str] = set()  # tool_call_ids with a tool_result since that model_call
 
@@ -79,18 +85,31 @@ def rebuild_messages(rows: Sequence[Mapping[str, Any]]) -> ReplayState:
             )
             confirmed.add(p["tool_call_id"])
         elif kind == "final":
-            return ReplayState(messages, row["step_index"] + 1, turns_used, spent, final=dict(p))
+            result = {k: v for k, v in p.items() if k != "repaired_by"}  # the clean record
+            return ReplayState(
+                messages, row["step_index"] + 1, turns_used, spent, repairs, final=result
+            )
         elif kind in ("error", "budget_exceeded"):
-            return ReplayState(messages, row["step_index"] + 1, turns_used, spent, failed=True)
+            failed = True  # final unless a requeued row follows
+            last_reply = None  # the conversation ended here; nothing is pending
+        elif kind == "requeued":
+            failed = False  # an operator put the run back; continue from the ledger
+        elif kind == "repair_requested":
+            messages.append({"role": "user", "content": p["message"]})
+            repairs += 1
+            last_reply = None  # the broken answer was judged; the re-ask is next
         else:
             raise RuntimeError(f"replay does not know step kind {kind!r}")
 
     next_index = rows[-1]["step_index"] + 1
 
+    if failed:
+        return ReplayState(messages, next_index, turns_used, spent, repairs, failed=True)
+
     # The worker died after writing a final-looking reply but before judging it.
     if last_reply is not None and last_reply["stop_reason"] == "end_turn":
         return ReplayState(
-            messages, next_index, turns_used, spent, unjudged_answer=last_reply["content"]
+            messages, next_index, turns_used, spent, repairs, unjudged_answer=last_reply["content"]
         )
 
     # The worker died mid-tool: calls from the last reply with no tool_result.
@@ -101,7 +120,7 @@ def rebuild_messages(rows: Sequence[Mapping[str, Any]]) -> ReplayState:
             for tc in last_reply["tool_calls"]
             if tc["id"] not in confirmed
         ]
-    return ReplayState(messages, next_index, turns_used, spent, pending_tool_calls=pending)
+    return ReplayState(messages, next_index, turns_used, spent, repairs, pending_tool_calls=pending)
 
 
 def replay_ledger(run_id: UUID) -> ReplayState:

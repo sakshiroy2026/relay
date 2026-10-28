@@ -1,0 +1,173 @@
+{
+  "repair": {
+    "conditions": {
+      "runs_per_kind": 25,
+      "workers": 3
+    },
+    "clean": {
+      "statuses": {
+        "succeeded": 25
+      },
+      "finals_accepted_as_is": 25,
+      "repaired_by": {},
+      "reask_model_calls_paid": 0,
+      "avg_end_turn_call_cost_usd": 0.008003,
+      "invalid_final_answer_errors": 0,
+      "ledger_problems": {}
+    },
+    "fenced": {
+      "statuses": {
+        "succeeded": 25
+      },
+      "finals_accepted_as_is": 0,
+      "repaired_by": {
+        "extracted_json": 25
+      },
+      "reask_model_calls_paid": 0,
+      "avg_end_turn_call_cost_usd": 0.008049,
+      "invalid_final_answer_errors": 0,
+      "ledger_problems": {}
+    },
+    "prose": {
+      "statuses": {
+        "succeeded": 25
+      },
+      "finals_accepted_as_is": 0,
+      "repaired_by": {
+        "extracted_json": 25
+      },
+      "reask_model_calls_paid": 0,
+      "avg_end_turn_call_cost_usd": 0.008258,
+      "invalid_final_answer_errors": 0,
+      "ledger_problems": {}
+    },
+    "bad_year": {
+      "statuses": {
+        "succeeded": 25
+      },
+      "finals_accepted_as_is": 0,
+      "repaired_by": {
+        "model_reask": 25
+      },
+      "reask_model_calls_paid": 25,
+      "avg_end_turn_call_cost_usd": 0.016754,
+      "invalid_final_answer_errors": 0,
+      "ledger_problems": {}
+    },
+    "hopeless": {
+      "statuses": {
+        "failed": 25
+      },
+      "finals_accepted_as_is": 0,
+      "repaired_by": {},
+      "reask_model_calls_paid": 25,
+      "avg_end_turn_call_cost_usd": 0.013148,
+      "invalid_final_answer_errors": 25,
+      "ledger_problems": {}
+    },
+    "summary": {
+      "runs_a_strict_parser_would_have_failed": 100,
+      "saved_by_the_ladder": 75,
+      "repair_success_rate_on_repairable_breakage": "75/75"
+    }
+  },
+  "outage": {
+    "conditions": {
+      "runs": 25,
+      "workers": 3,
+      "fake_model_failure_rate_phase1": 0.9
+    },
+    "phase1_statuses": {
+      "succeeded": 1,
+      "failed": 24
+    },
+    "phase1_error_reasons": {
+      "model_unavailable": 24
+    },
+    "requeue_outcomes": {
+      "requeued": 24
+    },
+    "phase2_statuses": {
+      "succeeded": 25
+    },
+    "runs_resumed_from_their_ledger": 24,
+    "runs_restarted_from_scratch": 0,
+    "model_calls_made_before_the_outage_and_kept": 8,
+    "ledger_problems": {}
+  },
+  "exhausted": {
+    "conditions": {
+      "runs": 5,
+      "lease_seconds": 3,
+      "max_attempts": 5
+    },
+    "runs_dead_lettered_by_the_reaper": 5,
+    "dead_reasons": {
+      "max_attempts_exhausted": 5
+    },
+    "requeue_outcomes": {
+      "requeued": 5
+    },
+    "requeued_runs_that_then_succeeded": 5,
+    "runs_with_ledger_problems": 0,
+    "per_run": [
+      {
+        "run_id": "64883de3",
+        "kills": 5,
+        "dead": true,
+        "reason": "max_attempts_exhausted",
+        "requeue": "requeued",
+        "final": {
+          "succeeded": 1
+        },
+        "problems": []
+      },
+      {
+        "run_id": "1e84ea7a",
+        "kills": 5,
+        "dead": true,
+        "reason": "max_attempts_exhausted",
+        "requeue": "requeued",
+        "final": {
+          "succeeded": 1
+        },
+        "problems": []
+      },
+      {
+        "run_id": "80d330ce",
+        "kills": 5,
+        "dead": true,
+        "reason": "max_attempts_exhausted",
+        "requeue": "requeued",
+        "final": {
+          "succeeded": 1
+        },
+        "problems": []
+      },
+      {
+        "run_id": "7c12e703",
+        "kills": 5,
+        "dead": true,
+        "reason": "max_attempts_exhausted",
+        "requeue": "requeued",
+        "final": {
+          "succeeded": 1
+        },
+        "problems": []
+      },
+      {
+        "run_id": "bcdde8c0",
+        "kills": 5,
+        "dead": true,
+        "reason": "max_attempts_exhausted",
+        "requeue": "requeued",
+        "final": {
+          "succeeded": 1
+        },
+        "problems": []
+      }
+    ]
+  },
+  "elapsed_s": 165.8,
+  "environment_note": "local Postgres 16 in a cloud container (not Neon), 4 CPUs; Docker-less workers as plain processes"
+}
