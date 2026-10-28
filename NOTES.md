@@ -210,3 +210,16 @@ share one trace id. OTLP export is one env var when a collector exists.
 /ops dashboard (static HTML -> /ops.json) screenshot in README, taken over this
 container's own 4,300-run test history. New deps (first since Day 1):
 prometheus-client, opentelemetry-sdk, otlp-http exporter. 5 new tests (104).
+
+## Day 11 — SSE: the ledger pushed, not polled
+
+Built by Claude Code; see learn/DAY11.md. Explain-back owed.
+Migration 006: AFTER INSERT ON steps -> pg_notify (fires on COMMIT: a fenced
+zombie's rolled-back insert rings nothing). GET /v1/runs/{id}/events holds one
+LISTEN connection and on each bell RE-READS run+steps via the tenant-scoped repo
+(bell says "look again"; the ledger stays the only truth), emits update on a
+fingerprint change, done at terminal. Page uses fetch-streaming (EventSource
+can't send Authorization) with automatic fallback to the old polling.
+Measured: 65 steps over 5 live runs, median 3.7 ms / p90 6.7 ms insert-commit ->
+parsed event (vs ~500 ms avg at 1 s polling); Playwright browser run clean.
+5 new tests (109 total).

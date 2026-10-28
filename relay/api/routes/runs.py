@@ -3,6 +3,7 @@ from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from relay.api import ratelimit, repo
@@ -87,6 +88,18 @@ def summarize_step(kind: str, p: dict[str, Any]) -> str:
     if kind == "requeued":
         return f"requeued by {p.get('requeued_by', 'an operator')} (was {p.get('from_status')})"
     return kind
+
+
+@router.get("/runs/{run_id}/events")
+def run_events(run_id: UUID, principal: Caller) -> StreamingResponse:
+    """The run pushed as server-sent events (Day 11); the page falls back to polling."""
+    from relay.api.events import run_event_stream
+
+    return StreamingResponse(
+        run_event_stream(principal.tenant_id, run_id),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.get("/runs/{run_id}/steps")

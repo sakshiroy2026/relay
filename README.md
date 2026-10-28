@@ -31,13 +31,14 @@ Instead of an agent loop living in a process that dies when the process dies, ev
 | Idempotent write tools (per-tool key + unique constraint) | ✅ working, verified with `docker kill` inside `save_company` (evidence below) |
 | API key check, per-run budget cap | ✅ working (evidence below) |
 | Full API keys (prefix + bcrypt, 60 s verification cache), tenant scoping in a repository layer, per-tenant rate limit + concurrency cap | ✅ tested live + 7 tests (evidence below) |
-| Live demo page (`GET /`, polls the ledger once a second) | ✅ working, kill-and-resume shown live (screenshot above) |
+| Live demo page (`GET /`, pushed via SSE since Day 11, polling as fallback) | ✅ working, kill-and-resume shown live (screenshot above) |
 | SSRF guard on `fetch_page` (https only, resolved IPs must be public, redirects re-checked, max 3) | ✅ unit-tested (24 cases); DNS checks go live with the real fetcher |
 | Retries with jittered backoff + per-tool circuit breaker (shared state in Postgres) | ✅ unit-tested (21 cases) + fault-injection runs (results below) |
 | Chaos harness and measured results | ✅ 200 runs (results below) |
 | Idempotency / fencing / throughput test suites (blueprint §13 A2–A4) | ✅ measured (results below) + 15 new tests |
 | Schema repair ladder (free JSON extraction → one model re-ask) | ✅ measured: 75/75 repairable broken finals saved (results below) |
 | Prometheus `/metrics` + `/ops` dashboard compiled from the ledger; OTel traces with `steps.trace_id` | ✅ working (screenshot above), 5 tests |
+| SSE for the demo page (LISTEN/NOTIFY push, fetch-streaming, polling fallback) | ✅ median 3.7 ms push latency, browser-tested, 5 tests |
 | Dead-letter queue (reaper for exhausted runs, `requeued` ledger marker, operator CLI) | ✅ measured: requeued runs resume from their ledger, 0 restarts (results below) |
 | Real model provider | 🔨 next (everything so far runs on a scripted fake model) |
 | Public deployment | ⬜ planned |
@@ -203,6 +204,8 @@ Manual tests against three worker containers and PostgreSQL on Neon. Run ids are
 **Per-run budget** — run `e8280abe`, created with a budget of $0.0001 (below the cost of one fake model call, $0.004881): the first model call ran, the next turn's check wrote a `budget_exceeded` step, and the run ended `failed` with exactly one `model_call` in its ledger. Spend is summed from the ledger's `model_call` rows, so the cap survives crashes and replays; it can overshoot by at most one call, whose cost is only known after it returns. A normal run (`272f1414`) costs $0.026 in fake prices against the default $0.25.
 
 **Live demo page** — run `783a03b3`, started from the page at `GET /`: worker `20a728` wrote steps 1–3, was killed with the `docker kill` command the page displays, and worker `0f4d83` took over at step 4 (attempt 2). The page showed the takeover banner, the per-worker badges, the final record and the saved company row. The page is one static HTML file polling `GET /v1/runs/{id}` and `GET /v1/runs/{id}/steps` once a second; it holds no API key and renders ledger text as plain text only.
+
+**SSE push (Day 11)** — a trigger rings `pg_notify` on every ledger commit (migration 006; commit-transactional, so a fenced zombie's rolled-back insert rings nothing), and `GET /v1/runs/{id}/events` streams `update` events re-read through the tenant-scoped repository. The page consumes it with fetch-streaming (EventSource can't send the Authorization header) and falls back to the old polling automatically. Measured over 5 live worker runs: 65 steps pushed at **median 3.7 ms / p90 6.7 ms** from insert commit to parsed client event (local Postgres; polling at 1 s averaged ~500 ms). Browser-verified with Playwright: a full run streamed with zero console errors. Method: [`learn/DAY11.md`](learn/DAY11.md).
 
 `scripts/check_run.py` checks every run above for index gaps and repeated model calls. The "already finished" and "already failed" replay paths are covered by unit tests (`tests/test_replay.py`) but haven't been hit live.
 

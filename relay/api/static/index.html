@@ -103,7 +103,7 @@
 
   <div class="grid">
     <section class="panel">
-      <h2>Ledger (steps table, live)</h2>
+      <h2>Ledger (steps table, live<span id="livemode"></span>)</h2>
       <ol class="steps" id="steps"></ol>
       <p class="empty" id="noSteps">Start a run to see its steps arrive.</p>
     </section>
@@ -169,13 +169,13 @@ $("startForm").addEventListener("submit", async (ev) => {
   try {
     const out = await api("/v1/runs", { method: "POST", body: JSON.stringify({ domain: $("domain").value.trim() }) });
     reset(out.run_id);
-    poll();
+    stream();
   } catch (e) { say(e.message); }
   finally { $("startBtn").disabled = false; }
 });
 $("openBtn").addEventListener("click", () => {
   const id = $("openId").value.trim();
-  if (id) { say(""); reset(id); poll(); }
+  if (id) { say(""); reset(id); stream(); }
 });
 
 function renderRun(run) {
@@ -246,26 +246,71 @@ async function showCompany(domain) {
   companyShown = true;
 }
 
+async function handleUpdate(id, run, steps) {
+  renderRun(run); renderSteps(steps);
+  if (TERMINAL.has(run.status) && !companyShown) await showCompany(run.input.domain);
+}
+
 async function poll() {
   const id = runId;
   try {
     const [run, steps] = await Promise.all([api(`/v1/runs/${id}`), api(`/v1/runs/${id}/steps`)]);
     if (id !== runId) return;               // a newer run was started meanwhile
-    renderRun(run); renderSteps(steps);
-    if (TERMINAL.has(run.status)) {
-      if (!companyShown) await showCompany(run.input.domain);
-      return;                               // finished: stop polling
-    }
+    await handleUpdate(id, run, steps);
+    if (TERMINAL.has(run.status)) return;   // finished: stop polling
   } catch (e) {
     say(e.status === 404 ? "No such run." : e.message);
     if (e.status === 404) return;
   }
-  timer = setTimeout(poll, 1000);           // polling, not SSE: the decided simple version
+  timer = setTimeout(poll, 1000);           // the fallback when the stream can't run
+}
+
+// Day 11: server-sent events. fetch streaming, not EventSource — EventSource
+// cannot send the Authorization header. On any stream problem: fall back to polling.
+async function stream() {
+  const id = runId;
+  $("livemode").textContent = ", pushed";
+  try {
+    const res = await fetch(`/v1/runs/${id}/events`, {
+      headers: { "Authorization": "Bearer " + $("key").value.trim() },
+    });
+    if (res.status === 401) throw new Error("API key missing or wrong: paste it in the box at the top right.");
+    if (!res.ok || !res.body) throw new Error(`${res.status} ${res.statusText}`);
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (id !== runId) { reader.cancel(); return; }  // a newer run took the page
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let cut;
+      while ((cut = buf.indexOf("\n\n")) >= 0) {
+        const block = buf.slice(0, cut); buf = buf.slice(cut + 2);
+        const event = (block.match(/^event: (.*)$/m) || [])[1];
+        const data = (block.match(/^data: (.*)$/m) || [])[1];
+        if (event === "update" && data) {
+          const u = JSON.parse(data);
+          await handleUpdate(id, u.run, u.steps);
+        } else if (event === "done") {
+          return;                            // terminal: the server closed cleanly
+        } else if (event === "gone") {
+          say("No such run."); return;
+        }
+      }
+    }
+    throw new Error("stream ended early");   // e.g. a proxy cut it: resume by polling
+  } catch (e) {
+    if (id !== runId) return;
+    $("livemode").textContent = ", polling";
+    if (e.message.includes("API key")) { say(e.message); return; }
+    poll();
+  }
 }
 
 // reopen the run in the URL (#run=<id>) after a page refresh
 const m = location.hash.match(/run=([0-9a-f-]{36})/);
-if (m) { reset(m[1]); poll(); }
+if (m) { reset(m[1]); stream(); }
 </script>
 </body>
 </html>
