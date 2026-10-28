@@ -146,3 +146,12 @@ See learn/CHAOS.md. Explain-back owed.
 See learn/SSRF.md. Explain-back owed.
 `relay/agent/ssrf.py`: https only, resolved IPs must be public, redirects re-checked (max 3).
 24 unit tests with a stub DNS. The real fetcher must use it with DNS + 2 MB / 10 s caps.
+
+## Day 8 — Retries, backoff, per-tool circuit breaker
+
+Built by Claude Code; see learn/DAY8.md. Explain-back owed.
+Retries (full jitter, max 3) live INSIDE a step; breaker state is a Postgres row shared
+by all workers (migration 003). Proofs: 50/50 flaky runs succeeded (41 calls recovered
+by retry), breaker opened after 5 consecutive failures and self-closed via one probe,
+kill -9 mid-retries resumed clean (run `28ca2373`). Numbers: chaos/fault_results.json
+(run on local Postgres in a cloud container, not Neon).

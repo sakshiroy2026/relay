@@ -20,6 +20,9 @@ FAILS WHEN  heartbeat() is False or a step index is taken -> LeaseLost is
             or MAX_TURNS without one -> `error` step and None. Spend already
             at or over budget_usd before a model call -> `budget_exceeded`
             step and None (one call can overshoot: its cost is only known after).
+            A model call still transiently failing after 3 tries -> `error`
+            step (`model_unavailable`) and None; a permanent model failure
+            -> `model_fatal`, never retried (Day 8).
 """
 
 from collections.abc import Callable
@@ -36,11 +39,13 @@ from relay.config import settings
 from relay.core.costs import refresh_run_totals
 from relay.core.ledger import LeaseLost, append_step
 from relay.core.replay import replay_ledger
+from relay.core.retry import FatalError, RetryableError, call_with_retries
 from relay.llm.client import ToolCall
 from relay.llm.factory import make_llm
 from relay.llm.pricing import price
 
 MAX_TURNS = 15  # counts model_call rows already in the ledger, not just this worker's
+MODEL_RETRY_ATTEMPTS = 3  # tries per model call (Day 8); only transient failures are retried
 
 
 def _run_tool(
@@ -71,7 +76,15 @@ def _run_tool(
         run_id,
         index,
         "tool_result",
-        {"tool": tc.name, "tool_call_id": tc.id, "ok": outcome.ok, "content": outcome.content},
+        {
+            "tool": tc.name,
+            "tool_call_id": tc.id,
+            "ok": outcome.ok,
+            "content": outcome.content,
+            # Day 8: how hard this call was. Replay ignores extra keys.
+            "attempts": outcome.attempts,
+            "breaker_open": outcome.breaker_open,
+        },
         worker_id,
     )
     messages.append(
@@ -144,13 +157,38 @@ def run_agent(
             )
             return None
 
-        # --- B: ask the model ---
-        response = llm.call(
-            model=settings.model_planner,
-            system=SYSTEM_PROMPT,
-            messages=messages,
-            tools=TOOL_SCHEMAS,
-        )
+        # --- B: ask the model (Day 8: retried on transient failures) ---
+        # Worst-case retry sleep is ~3 s, far below the lease, so no extra
+        # heartbeat is needed. A model down for longer fails the run with an
+        # `error` step; nothing is charged for calls that never happened.
+        try:
+            response, attempts = call_with_retries(
+                lambda: llm.call(
+                    model=settings.model_planner,
+                    system=SYSTEM_PROMPT,
+                    messages=messages,
+                    tools=TOOL_SCHEMAS,
+                ),
+                attempts=MODEL_RETRY_ATTEMPTS,
+            )
+        except RetryableError as exc:  # still failing after every attempt
+            append_step(
+                run_id,
+                index,
+                "error",
+                {"reason": "model_unavailable", "detail": str(exc)},
+                worker_id,
+            )
+            return None
+        except FatalError as exc:  # would fail identically again: never retried
+            append_step(
+                run_id,
+                index,
+                "error",
+                {"reason": "model_fatal", "detail": str(exc)},
+                worker_id,
+            )
+            return None
 
         # --- E: write the receipt BEFORE judging the reply ---
         cost = price(response)
@@ -158,7 +196,7 @@ def run_agent(
             run_id,
             index,
             "model_call",
-            {**asdict(response), "cost_usd": cost},
+            {**asdict(response), "cost_usd": cost, "attempts": attempts},
             worker_id,
         )
         spent += cost

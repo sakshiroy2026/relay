@@ -195,3 +195,22 @@ def test_end_turn_reply_without_verdict_is_unjudged() -> None:
 def test_ledger_without_run_started_is_a_bug() -> None:
     with pytest.raises(RuntimeError):
         rebuild_messages([model_call(0, turn=0)])
+
+
+def test_day8_extra_payload_keys_change_nothing() -> None:
+    """Day 8 adds attempts / breaker_open to payloads; replay must not care."""
+    plain = rebuild_messages(FIRST_FIVE)
+
+    enriched = [dict(row, payload=dict(row["payload"])) for row in FIRST_FIVE]
+    for row in enriched:
+        if row["kind"] == "model_call":
+            row["payload"]["attempts"] = 2
+        if row["kind"] == "tool_result":
+            row["payload"]["attempts"] = 3
+            row["payload"]["breaker_open"] = False
+    with_extras = rebuild_messages(enriched)
+
+    assert with_extras.messages == plain.messages
+    assert with_extras.next_index == plain.next_index
+    assert with_extras.turns_used == plain.turns_used
+    assert with_extras.pending_tool_calls == plain.pending_tool_calls
