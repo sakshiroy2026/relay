@@ -30,6 +30,7 @@ Instead of an agent loop living in a process that dies when the process dies, ev
 | SSRF guard on `fetch_page` (https only, resolved IPs must be public, redirects re-checked, max 3) | ✅ unit-tested (24 cases); DNS checks go live with the real fetcher |
 | Retries with jittered backoff + per-tool circuit breaker (shared state in Postgres) | ✅ unit-tested (21 cases) + fault-injection runs (results below) |
 | Chaos harness and measured results | ✅ 200 runs (results below) |
+| Idempotency / fencing / throughput test suites (blueprint §13 A2–A4) | ✅ measured (results below) + 15 new tests |
 | Real model provider | 🔨 next (everything so far runs on a scripted fake model) |
 | Public deployment | ⬜ planned |
 
@@ -68,6 +69,20 @@ Instead of an agent loop living in a process that dies when the process dies, ev
 | Breaker recovery after the outage ended | closed itself via one probe |
 
 **Conditions:** fake model and tools with injected 503s, 3 workers, retries capped at 3 attempts with full-jitter backoff. These runs were executed against a local PostgreSQL 16 (in a development container, not Neon); the chaos-harness numbers above were measured on Neon. A worker killed with `kill -9` while retries were active (run `28ca2373`) was resumed by a second worker with no gaps and no repeated model calls. Raw numbers: [`chaos/fault_results.json`](chaos/fault_results.json); method: [`learn/DAY8.md`](learn/DAY8.md).
+
+`python -m chaos.idempotency_test`, `python -m chaos.fencing_test --n 100`, `python -m chaos.throughput_test` (Day 16): the three safety mechanisms, leaned on far harder than real traffic would.
+
+| Metric | Result |
+|---|---|
+| **A2 idempotency** — 300 keys × 4 processes racing the same `save_company` key (then again with the write window held open 20 ms, forcing full overlap), plus 200 writers `kill -9`'d mid-transaction | **500 / 500 keys executed exactly once**; 0 duplicate company rows; the write and its receipt never disagreed (they commit together); all racers got the same answer |
+| **A3 fencing** — the run's owner frozen with `SIGSTOP` at a random moment, another worker takes over, the zombie woken 0–2 s later; 100 iterations | 97 frozen mid-run, **97 / 97 succeeded, 0 finished by a stale worker**; stopped by the unique constraint ×81, the heartbeat ×14, the guarded finish ×2; in 16 runs the zombie's write landed first and the *new owner* was fenced — ledgers all valid either way |
+| A3 liveness note | 2 freezes landed inside a transaction, so the held row lock delayed takeover until wake-up (`SKIP LOCKED` skips locked rows); nothing duplicated — bounded in production by `idle_in_transaction_session_timeout` |
+| **A4 claim query** with 100,000 finished runs in the table | **0.111 ms** with the partial index; **8.4 ms** with it dropped (~76×) — finished runs are invisible to `runs_claimable_idx` |
+| **A4 throughput** at 0.2 s fake model latency | 1 → 16 workers: 1.18 → **18.4 runs/s (15.6×, 98% scaling efficiency)** on 4 CPUs — workers wait on the model, not the queue |
+| A4 throughput at 0 s latency (Relay's own overhead) | 37 runs/s on 1 worker; tops out ~179 runs/s at 8 workers on 4 CPUs |
+| Across all 2,430 sweep runs | 0 claimed twice, 0 ledger problems, all succeeded |
+
+**Conditions:** local PostgreSQL 16 in a cloud development container (not Neon), 4 CPUs, workers as plain processes (no Docker). `scripts/check_run.py` now also validates ledger *shape* (starts with `run_started`, every tool row answers the latest model call, nothing after the verdict). Raw numbers: [`chaos/idempotency_results.json`](chaos/idempotency_results.json), [`chaos/fencing_results.json`](chaos/fencing_results.json), [`chaos/throughput_results.json`](chaos/throughput_results.json); method: [`learn/DAY16.md`](learn/DAY16.md).
 
 No accuracy numbers are published yet. They need a real model and a hand-labelled dataset.
 
@@ -208,4 +223,4 @@ Currently implements durable execution, lease-based claiming with fencing, trans
 
 Next, in order: the switch from the fake model to a real provider (with real search and page fetch); public deployment; then a hand-labelled golden dataset with LLM-as-judge evaluation gated in CI.
 
-Later: a schema-repair ladder with model escalation, and OpenTelemetry GenAI tracing. Per-tool circuit breakers and retry-with-backoff landed with Day 8 (see Measured results).
+Later: a schema-repair ladder with model escalation, and OpenTelemetry GenAI tracing. Per-tool circuit breakers and retry-with-backoff landed with Day 8, and the idempotency / fencing / throughput test suites with Day 16 (see Measured results).

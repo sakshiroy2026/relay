@@ -1,0 +1,48 @@
+{
+  "conditions": {
+    "workers": 3,
+    "lease_seconds": 3,
+    "fake_delay_seconds": 0.3,
+    "one_run_seconds": 1.26,
+    "pause": "SIGSTOP of the run's owner at a uniform random moment within one run's duration",
+    "wake": "SIGCONT 0-2.0 s (uniform) after another worker took the lease"
+  },
+  "iterations": 100,
+  "outcomes": {
+    "paused": 97,
+    "no takeover within 60 s": 2,
+    "no pause (run finished first)": 1
+  },
+  "paused_runs_that_ended_succeeded": 97,
+  "how_the_zombie_was_stopped": {
+    "UNIQUE(run_id, step_index) on its next write": 81,
+    "heartbeat (lease gone at the top of a turn)": 14,
+    "guarded finish (lease_owner = me AND status = 'running')": 2
+  },
+  "write_the_zombie_lost_to_the_constraint": {
+    "model_call": 79,
+    "tool_call": 2
+  },
+  "model_calls_paid_for_then_thrown_away_by_fencing": 95,
+  "zombie_woke_while_run_still_running": 43,
+  "stale_writes_accepted_total": 92,
+  "runs_with_a_stale_write_accepted": 16,
+  "stale_write_kinds": {
+    "model_call": 29,
+    "tool_call": 27,
+    "tool_result": 27,
+    "final": 9
+  },
+  "new_owners_fenced_by_a_zombie_write_that_landed_first": 16,
+  "runs_finished_by_a_stale_zombie": 0,
+  "runs_the_woken_zombie_later_reclaimed_legitimately": 8,
+  "runs_with_ledger_problems": 0,
+  "keys_executed_more_than_once": 0,
+  "domains_with_company_rows_not_exactly_1": 0,
+  "takeover_s": {
+    "median": 3.02,
+    "p90": 3.23
+  },
+  "elapsed_s": 658.4,
+  "environment_note": "local Postgres 16 in a cloud container (not Neon), 4 CPUs; Docker-less workers as plain processes"
+}

@@ -1,0 +1,68 @@
+{
+  "race": {
+    "conditions": {
+      "keys": 300,
+      "racers_per_key": 4,
+      "widen_ms": 0
+    },
+    "calls": 1200,
+    "keys_executed_exactly_once": 300,
+    "keys_executed_more_than_once": 0,
+    "keys_never_executed": 0,
+    "keys_where_callers_got_different_answers": 0,
+    "calls_not_ok": 0,
+    "writes_started": 624,
+    "writes_committed": 300,
+    "writes_rolled_back_by_the_receipt_check": 324,
+    "calls_answered_from_the_receipt": 576,
+    "attempts_recorded_per_key": {
+      "4": 300
+    },
+    "domains_with_company_rows_not_exactly_1": 0,
+    "elapsed_s": 1.26
+  },
+  "race_widened": {
+    "conditions": {
+      "keys": 300,
+      "racers_per_key": 4,
+      "widen_ms": 20
+    },
+    "calls": 1200,
+    "keys_executed_exactly_once": 300,
+    "keys_executed_more_than_once": 0,
+    "keys_never_executed": 0,
+    "keys_where_callers_got_different_answers": 0,
+    "calls_not_ok": 0,
+    "writes_started": 1153,
+    "writes_committed": 300,
+    "writes_rolled_back_by_the_receipt_check": 853,
+    "calls_answered_from_the_receipt": 47,
+    "attempts_recorded_per_key": {
+      "4": 300
+    },
+    "domains_with_company_rows_not_exactly_1": 0,
+    "elapsed_s": 7.88
+  },
+  "kill": {
+    "conditions": {
+      "keys": 200,
+      "widen_ms": 200,
+      "kill": "SIGKILL at a uniform random moment in [0, 1.5 x widen_ms] after 'go'"
+    },
+    "where_the_kill_landed": {
+      "receipt in_flight (killed mid-write; the write must have rolled back)": 144,
+      "receipt ok (the write had committed before the kill)": 34,
+      "no receipt yet (killed before step 1)": 22,
+      "(of those ok: the process had already exited)": 1
+    },
+    "write_and_receipt_disagree_after_kill": 0,
+    "atomicity_break_examples": [],
+    "reissue_calls_not_ok": 0,
+    "reissues_that_executed_the_write": 166,
+    "keys_executed_exactly_once_after_reissue": 200,
+    "keys_executed_more_than_once": 0,
+    "domains_with_company_rows_not_exactly_1": 0
+  },
+  "elapsed_s": 80.8,
+  "environment_note": "local Postgres 16 in a cloud container (not Neon), 4 CPUs; Docker-less workers as plain processes"
+}

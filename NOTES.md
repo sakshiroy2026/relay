@@ -155,3 +155,16 @@ by all workers (migration 003). Proofs: 50/50 flaky runs succeeded (41 calls rec
 by retry), breaker opened after 5 consecutive failures and self-closed via one probe,
 kill -9 mid-retries resumed clean (run `28ca2373`). Numbers: chaos/fault_results.json
 (run on local Postgres in a cloud container, not Neon).
+
+## Day 16 — Idempotency, fencing and throughput, measured
+
+Built by Claude Code; see learn/DAY16.md. Explain-back owed.
+No mechanism changed; three harnesses leaned on the proven ones. A2: 500 keys
+raced by 4 processes + 200 kill -9 mid-write -> every key executed once, receipt
+and row never disagreed. A3: owner SIGSTOPped 100x -> 0 stale finishes (fenced by
+the constraint 81x, heartbeat 14x, guarded finish 2x); 16 runs where the zombie's
+write landed first and the NEW owner was fenced — still one valid history.
+A4: claim query 0.111 ms with 100k finished runs (8.4 ms without the partial
+index); 16 workers at 0.2 s model latency = 15.6x speedup (98% efficiency).
+check_run.py now validates ledger shape too. Numbers: chaos/*_results.json
+(local Postgres in a cloud container, not Neon).
