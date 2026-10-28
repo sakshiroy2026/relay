@@ -41,6 +41,17 @@ locally with exactly those limits before any sign-up:
 - `/demo-config` returns `{"demo_key": null}` until `PUBLIC_DEMO_KEY` is set,
   and the mode re-check means a live tenant's key is never offered.
 
+### Live on Render (29 Oct 2026)
+
+- URL: https://relay-sakshi.onrender.com (service `relay-sakshi`, Singapore,
+  Free plan, branch `deploy-render`, Dockerfile `./deploy/single/Dockerfile`,
+  health check `/healthz`).
+- First deploy of `bc1a26a`: `/healthz` and `/readyz` OK, `/demo-config`
+  offers the demo key, `/` and `/ops` return 200.
+- Public end-to-end run `b6e803fc` (anthropic.com, demo key fetched from
+  `/demo-config` like a visitor) succeeded in ~4 s. $0 spent: no
+  `ANTHROPIC_API_KEY` on the service.
+
 ## 4. Render specifics that bit
 
 | Thing | Detail |
