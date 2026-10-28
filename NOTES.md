@@ -284,3 +284,14 @@ judge for industry only (json_schema verdict), accuracy AND precision, run_eval
 committed LIVE results vs thresholds.json placeholders; demo results always
 fail). Demo eval: 6/6 and 0/6 as designed. .github/workflows/ci.yml: ruff, mypy,
 tests on Postgres 16, gate; no secrets. 16 new tests (196 total).
+
+## Deployment config (Oracle Cloud Always Free) + public demo key
+
+Built by Claude Code; see learn/DEPLOY.md. Explain-back owed.
+docker-compose.prod.yml (Caddy HTTPS + API + 3 workers, restart unless-stopped,
+Neon stays the DB), deploy/Caddyfile (flush_interval -1 for SSE), Dockerfile now
+ships alembic + scripts, .env.example. /demo-config offers PUBLIC_DEMO_KEY to
+visitors ONLY if its tenant is demo-mode (re-checked per request); the page
+prefills it. Browser-verified: a keyless visitor ran a free 14-step run.
+NOT YET BUILT: no Docker in the dev container; the first build is on the server.
+4 new tests (200 total).

@@ -1,0 +1,14 @@
+# Caddy: automatic HTTPS (Let's Encrypt) for RELAY_DOMAIN, proxying to the API.
+# RELAY_DOMAIN comes from .env (e.g. relay-sakshi.duckdns.org).
+{$RELAY_DOMAIN} {
+	reverse_proxy api:8000 {
+		# SSE (Day 11): pass every event through the moment it is written
+		flush_interval -1
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+}

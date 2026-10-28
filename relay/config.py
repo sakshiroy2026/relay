@@ -8,6 +8,10 @@ class Settings(BaseSettings):
     dev_tenant_id: str
     lease_seconds: int = 90
     relay_api_key: str | None = None  # safety slice: unset -> /v1 refuses every request
+    # Deployment: a key of a DEMO-mode tenant that the public page offers to visitors.
+    # /demo-config re-checks the tenant's mode on every request and never reveals a
+    # key whose tenant is live (paid), so a misconfiguration can't publish spending.
+    public_demo_key: str | None = None
     # ── LLM (Day 4) ─────────────────────────────────────────────
     llm_provider: Literal["fake", "anthropic"] = "fake"
     model_planner: str = "fake-planner"

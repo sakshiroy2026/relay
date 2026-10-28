@@ -62,7 +62,7 @@ as output) ≈ **$0.006 per run** on Haiku 5.5 (≈ $0.12 on Sonnet 5.5).
 | P3 | Cost hygiene | prompt caching on the frozen system prompt + tool list (verify `cache_read_input_tokens` > 0; Haiku has a minimum cacheable prefix — measure, don't assume); effort setting measured (`low` vs `medium`) | ~10 runs | ~$0.10 |
 | P4 | Chaos harness on the real model | re-run `chaos/fault_test.py`-style kill tests, small N (≈30), budget caps on | ~30 runs | ~$0.30 |
 | P5 | Rung 3 + fallback — **BUILT** (learn/P5_ESCALATION.md, budget-guarded). Left: one paid run that forces rung 3 (e.g. `FAKE_BROKEN_FINAL` has no effect on the real model, so pick a domain it can't settle and watch for `escalated:` tags) | ~5 runs | ~$0.20 |
-| — | Deployment (EC2 + domain, Caddy, Grafana/OTLP) | Sakshi buys the infra first | — | infra cost |
+| — | Deployment — **config + guide ready** (learn/DEPLOY.md: Oracle Cloud Always Free VM + DuckDNS + Neon, `docker-compose.prod.yml`, Caddy). Never built (no Docker in the dev container): the first build is on the server. Public visitors get a demo-tenant key ($0) | Sakshi follows the guide | $0 |
 | — | Day 18 hand-labelling | Sakshi's own work | — | $0 |
 | P6 | Eval — **BUILT** (`evals/`, learn/P6_EVAL.md, CI gate). Left: Sakshi's labels in `evals/golden.jsonl` (format: evals/README.md), then `python -m evals.run_eval --mode live --yes-spend`, commit `evals/results.json`, set real floors in `evals/thresholds.json` | ~50 runs + 50 judge calls | ~$0.40 |
 
