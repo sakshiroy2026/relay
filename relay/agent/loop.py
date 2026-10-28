@@ -43,6 +43,7 @@ from relay.core.retry import FatalError, RetryableError, call_with_retries
 from relay.llm.client import ToolCall
 from relay.llm.factory import make_llm
 from relay.llm.pricing import price
+from relay.obs.tracing import tracer
 
 MAX_TURNS = 15  # counts model_call rows already in the ledger, not just this worker's
 MODEL_RETRY_ATTEMPTS = 3  # tries per model call (Day 8); only transient failures are retried
@@ -70,7 +71,11 @@ def _run_tool(
         worker_id,
     )
 
-    outcome = dispatch_tool(tc.name, tc.args, ctx)
+    with tracer().start_as_current_span(
+        f"relay.tool {tc.name}", attributes={"relay.tool": tc.name}
+    ) as span:
+        outcome = dispatch_tool(tc.name, tc.args, ctx)
+        span.set_attributes({"relay.ok": outcome.ok, "relay.attempts": outcome.attempts})
 
     index = append_step(
         run_id,
@@ -189,15 +194,26 @@ def run_agent(
         # heartbeat is needed. A model down for longer fails the run with an
         # `error` step; nothing is charged for calls that never happened.
         try:
-            response, attempts = call_with_retries(
-                lambda: llm.call(
-                    model=settings.model_planner,
-                    system=SYSTEM_PROMPT,
-                    messages=messages,
-                    tools=TOOL_SCHEMAS,
-                ),
-                attempts=MODEL_RETRY_ATTEMPTS,
-            )
+            with tracer().start_as_current_span(
+                "relay.model_call",
+                attributes={"gen_ai.request.model": settings.model_planner, "relay.turn": turn},
+            ) as span:
+                response, attempts = call_with_retries(
+                    lambda: llm.call(
+                        model=settings.model_planner,
+                        system=SYSTEM_PROMPT,
+                        messages=messages,
+                        tools=TOOL_SCHEMAS,
+                    ),
+                    attempts=MODEL_RETRY_ATTEMPTS,
+                )
+                span.set_attributes(
+                    {
+                        "gen_ai.usage.input_tokens": response.input_tokens,
+                        "gen_ai.usage.output_tokens": response.output_tokens,
+                        "relay.attempts": attempts,
+                    }
+                )
         except RetryableError as exc:  # still failing after every attempt
             append_step(
                 run_id,

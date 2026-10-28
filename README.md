@@ -10,6 +10,10 @@ Instead of an agent loop living in a process that dies when the process dies, ev
 
 *The demo page during run `783a03b3`: the worker that owned the run was killed with `docker kill` after step 3; another worker replayed the ledger and continued at step 4.*
 
+![Ops dashboard: runs, crash-resumes, spend, DLQ depth, the repair ladder and the must-stay-zero duplicate-effects card, all compiled from the ledger](learn/img/ops-dashboard.png)
+
+*The `/ops` page over this repo's own test history — 4,300+ runs of chaos/fencing/repair harnesses: 145 crash-resumes, the repair ladder's rungs, and `effects committed twice: 0`. Every number is aggregated from the `steps` table at request time; the same data ships as Prometheus metrics at `/metrics`.*
+
 ---
 
 ## Status
@@ -33,6 +37,7 @@ Instead of an agent loop living in a process that dies when the process dies, ev
 | Chaos harness and measured results | ✅ 200 runs (results below) |
 | Idempotency / fencing / throughput test suites (blueprint §13 A2–A4) | ✅ measured (results below) + 15 new tests |
 | Schema repair ladder (free JSON extraction → one model re-ask) | ✅ measured: 75/75 repairable broken finals saved (results below) |
+| Prometheus `/metrics` + `/ops` dashboard compiled from the ledger; OTel traces with `steps.trace_id` | ✅ working (screenshot above), 5 tests |
 | Dead-letter queue (reaper for exhausted runs, `requeued` ledger marker, operator CLI) | ✅ measured: requeued runs resume from their ledger, 0 restarts (results below) |
 | Real model provider | 🔨 next (everything so far runs on a scripted fake model) |
 | Public deployment | ⬜ planned |
@@ -228,9 +233,9 @@ Relay is also **not a Temporal clone**. It is a deliberately minimal, Postgres-o
 
 ## Stack
 
-Python 3.13 · FastAPI · Pydantic v2 · psycopg 3 (raw SQL, no ORM) · Alembic · PostgreSQL (Neon) · Docker Compose
+Python 3.13 · FastAPI · Pydantic v2 · psycopg 3 (raw SQL, no ORM) · Alembic · PostgreSQL (Neon) · Docker Compose · prometheus-client · OpenTelemetry SDK
 
-Planned: Redis, OpenTelemetry, Prometheus, Grafana, Caddy, AWS EC2.
+Planned: Grafana + an OTLP collector (the config file is in the repo), Caddy, AWS EC2. Redis stays out until a measured need appears.
 
 **On model spend:** development runs against a scripted fake model client and fake tools (canned search results and pages) behind the same `LLMClient` interface a real provider will use, so durability work costs nothing to test. The fake is deterministic and chooses its reply from the conversation it is handed rather than from internal state — meaning a fresh worker resuming after a crash gets the same reply the dead one would have. The chaos harness ran on the fake client, because it measures crash recovery rather than model quality; this is stated next to the numbers.
 
@@ -242,4 +247,4 @@ Currently implements durable execution, lease-based claiming with fencing, trans
 
 Next, in order: the switch from the fake model to a real provider (with real search and page fetch); public deployment; then a hand-labelled golden dataset with LLM-as-judge evaluation gated in CI.
 
-Later: OpenTelemetry GenAI tracing and Prometheus metrics. Per-tool circuit breakers and retry-with-backoff landed with Day 8, the idempotency / fencing / throughput test suites with Day 16, and the schema repair ladder + dead-letter queue with Day 9 (see Measured results). The ladder's last rung — escalating to a *stronger* model — waits for the real-model switch.
+Per-tool circuit breakers and retry-with-backoff landed with Day 8, the idempotency / fencing / throughput test suites with Day 16, the schema repair ladder + dead-letter queue with Day 9, and Prometheus metrics + OpenTelemetry tracing + the `/ops` dashboard with Day 17. The ladder's last rung — escalating to a *stronger* model — waits for the real-model switch; Grafana and the OTLP collector come with deployment.

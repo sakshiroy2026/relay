@@ -16,14 +16,11 @@ dependencies = [
     "pydantic",
     "pydantic-settings",
     "structlog",
-    "fastapi",
-    "uvicorn[standard]",
-    "psycopg[binary,pool]",
-    "alembic",
-    "pydantic",
-    "pydantic-settings",
-    "structlog",
     "bcrypt",
+    # Day 17 observability
+    "prometheus-client",
+    "opentelemetry-sdk",
+    "opentelemetry-exporter-otlp-proto-http",
 ]
 
 [project.optional-dependencies]

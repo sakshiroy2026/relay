@@ -196,3 +196,17 @@ a repository layer where tenant_id is a required argument; cross-tenant reads
 429) and max_concurrent_runs (Postgres advisory lock + count: 8 racing creates
 vs cap 3 -> exactly 3 rows). relay/api/auth.py deleted; seed.py --tenant NAME.
 7 new tests (99 total).
+
+## Day 17 — Observability: Prometheus, OpenTelemetry, the /ops page
+
+Built by Claude Code; see learn/DAY17.md. Explain-back owed.
+No counters in the hot path: a custom Prometheus collector aggregates the LEDGER
+at scrape time (38 relay_* series: runs, resumes, spend, retries, breaker state,
+repair rungs, DLQ depth, and relay_write_effects_executed_twice — the one alert
+that matters). HTTP latency labeled by route template (cardinality). OTel: one
+trace per run ATTEMPT, GenAI spans per model call/tool; steps.trace_id (reserved
+since migration 001) finally written — verified: all 13 worker rows of a run
+share one trace id. OTLP export is one env var when a collector exists.
+/ops dashboard (static HTML -> /ops.json) screenshot in README, taken over this
+container's own 4,300-run test history. New deps (first since Day 1):
+prometheus-client, opentelemetry-sdk, otlp-http exporter. 5 new tests (104).
