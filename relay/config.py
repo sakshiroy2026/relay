@@ -19,6 +19,17 @@ class Settings(BaseSettings):
         8000  # ~2k tokens of page text per fetch: the model's main input cost
     )
     fake_delay_seconds: float = 0.0  # Day 6: slow the fake model down so a run can be killed
+    # ── Real model (P1) ─────────────────────────────────────────
+    # The key itself is read by the SDK from ANTHROPIC_API_KEY; it never passes
+    # through Settings, so it can't end up in a log of the settings object.
+    anthropic_model: str = "claude-haiku-5-5"  # the cheapest current model: the dev default
+    llm_effort: Literal["low", "medium", "high"] = (
+        "medium"  # Haiku 5.5's own default; P3 measures low
+    )
+    llm_max_tokens: int = 8000  # per reply, thinking included; a final record is ~1k
+    llm_timeout_seconds: float = 60.0  # keep LEASE_SECONDS well above this in deployment
+    llm_prompt_cache: bool = True  # P3: cache the stable prefix (system + tools + history)
+    live_run_budget_usd: float = 0.05  # per live run; a Haiku run is ~$0.006, so ~8x headroom
     # ── Retries + circuit breaker (Day 8) ───────────────────────
     breaker_threshold: int = 5  # consecutive failures before a tool's breaker opens
     # ── Repair ladder (Day 9) ───────────────────────────────────

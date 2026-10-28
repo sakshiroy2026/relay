@@ -57,7 +57,7 @@ as output) ≈ **$0.006 per run** on Haiku 5.5 (≈ $0.12 on Sonnet 5.5).
 
 | # | Stage | Builds | Paid runs needed | Est. cost |
 |---|---|---|---|---|
-| P1 | Real model switch | `relay/llm/anthropic.py` behind the existing `LLMClient` protocol (official `anthropic` SDK; tool-use ↔ Relay `Response`/`ToolCall`; usage incl. cache tokens; `refusal` stop reason; 429/5xx/connection → `RetryableError`, 400 → `FatalError`; SDK `max_retries=0` because Relay retries itself); real prices in `pricing.py`; lower the default `budget_usd` for Haiku. Unit tests use stubbed responses ($0) | ~10 smoke runs | ~$0.10 |
+| P1 | Real model — **BUILT** (`relay/llm/anthropic_client.py`, learn/P1_REAL_MODEL.md, tested via the SDK + mock transport). Left: the paid proof `python -m scripts.live_smoke --yes-spend --runs 3` on a live tenant (`seed.py --tenant NAME --mode live`) | ~3–10 runs | ~$0.02–0.06 |
 | P2 | Real tools — **BUILT** (learn/REAL_TOOLS.md, 32 tests). Left to do: one real Tavily search to verify its request/response format (free tier, $0; the docs host was blocked from the container, so the format is from memory), then one real fetch. Needs `TAVILY_API_KEY` (free signup) and `TOOLS_PROVIDER=real`. The pinned fetcher bypasses HTTP proxies by design, so in a proxied cloud container real fetches may be blocked: verify on a normal host | 1 search + 1 fetch | $0 |
 | P3 | Cost hygiene | prompt caching on the frozen system prompt + tool list (verify `cache_read_input_tokens` > 0; Haiku has a minimum cacheable prefix — measure, don't assume); effort setting measured (`low` vs `medium`) | ~10 runs | ~$0.10 |
 | P4 | Chaos harness on the real model | re-run `chaos/fault_test.py`-style kill tests, small N (≈30), budget caps on | ~30 runs | ~$0.30 |

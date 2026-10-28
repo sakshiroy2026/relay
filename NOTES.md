@@ -248,3 +248,17 @@ only, text cut to page_text_max_chars=8000. Failures keep the Day 8 split.
 mutation check (re-resolving before connect fails the pinning test).
 UNVERIFIED until the first real call: Tavily's wire format (docs host blocked
 from the container). The pinned fetcher bypasses HTTP proxies by design.
+
+## P1 — Real model adapter (built for $0, paid proof pending)
+
+Built by Claude Code; see learn/P1_REAL_MODEL.md. Explain-back owed.
+relay/llm/anthropic_client.py behind the same LLMClient protocol (official SDK
+2.x, SDK retries off). Haiku 5.5 thinks, and a thinking signature is only valid
+in a byte-identical conversation, so model_call rows store the raw reply blocks
+and replay sends them verbatim (crash test: 4 requests for 4 turns across a
+takeover, each an exact prefix-extension; mutant replay without raw fails it).
+Thinking-mismatch 400 -> strip + retry once. Refusal/max_tokens = billed
+Response: cost recorded, then error. Migration 008 tenants.run_mode: demo (fake,
+$0, default) vs live (Haiku + real tools, $0.05/run). scripts/live_smoke.py is
+the paid proof (refuses without key and --yes-spend). Demo run b9fcb695 OK.
+New dep: anthropic. 25 new tests (173 total).

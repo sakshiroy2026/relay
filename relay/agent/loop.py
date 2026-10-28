@@ -38,15 +38,34 @@ from relay.config import settings
 from relay.core.costs import refresh_run_totals
 from relay.core.ledger import LeaseLost, append_step
 from relay.core.repair import correction_message, parse_final
-from relay.core.replay import replay_ledger
+from relay.core.replay import assistant_message, replay_ledger
 from relay.core.retry import FatalError, RetryableError, call_with_retries
 from relay.llm.client import ToolCall
-from relay.llm.factory import make_llm
+from relay.llm.factory import make_llm, planner_model, resolve_mode
 from relay.llm.pricing import price
 from relay.obs.tracing import tracer
 
 MAX_TURNS = 15  # counts model_call rows already in the ledger, not just this worker's
 MODEL_RETRY_ATTEMPTS = 3  # tries per model call (Day 8); only transient failures are retried
+
+
+# A billed reply that is neither a tool turn nor an answer (P1: real models only).
+STOP_ERRORS = {
+    "refusal": "model_refused",
+    "max_tokens": "model_max_tokens",
+    "other": "model_stopped",
+}
+
+
+def _stop_error(run_id: UUID, index: int, stop_reason: str, worker_id: str) -> None:
+    """The reply was paid for and is already in the ledger; now end the run honestly."""
+    append_step(
+        run_id,
+        index,
+        "error",
+        {"reason": STOP_ERRORS[stop_reason], "detail": f"model stopped with {stop_reason!r}"},
+        worker_id,
+    )
 
 
 def _run_tool(
@@ -56,12 +75,19 @@ def _run_tool(
     tc: ToolCall,
     worker_id: str,
     messages: list[dict[str, Any]],
+    tools_provider: str = "",
 ) -> int:
     """tool_call -> run it -> tool_result -> tool message. Returns the next index."""
     # Day 7: the key comes from the model's call id, NOT the step index: a re-run after
     # a crash (Day 6) writes a new tool_call row at a new index but must reuse the key.
     idem_key = f"{run_id}:{tc.id}"
-    ctx = ToolContext(run_id=run_id, domain=domain, step_index=index, idem_key=idem_key)
+    ctx = ToolContext(
+        run_id=run_id,
+        domain=domain,
+        step_index=index,
+        idem_key=idem_key,
+        tools_provider=tools_provider,
+    )
 
     index = append_step(
         run_id,
@@ -143,11 +169,12 @@ def run_agent(
     worker_id: str,
     heartbeat: Callable[[], bool],
     budget_usd: float,
+    mode: str | None = None,
 ) -> dict[str, Any] | None:
     # --- SETUP: read the chart before doing anything ---
     # The user message is rebuilt from the run_started row; `domain` goes to the
-    # tools (save_company writes under the run's own domain).
-    llm = make_llm()
+    # tools (save_company writes under the run's own domain). `mode` (P1) picks the
+    # model and tools: "demo" = fake/fake, "live" = real/real, None = process default.
     state = replay_ledger(run_id)  # one read; state.next_index is our belief from here on
 
     # --- Resume edge cases: the run may already have a verdict ---
@@ -161,6 +188,20 @@ def run_agent(
     spent = state.spent_usd  # from the ledger, so a resumed run keeps counting
     repairs_used = state.repairs_used  # re-asks are counted from the ledger too
 
+    if state.unhandled_stop is not None:  # died after a billed refusal/max_tokens reply
+        _stop_error(run_id, index, state.unhandled_stop, worker_id)
+        return None
+
+    try:  # before any money is spent: a misconfigured model fails the run, not the worker
+        llm_provider, tools = resolve_mode(mode)
+        llm = make_llm(llm_provider)
+        model = planner_model(llm_provider)
+    except Exception as exc:
+        append_step(
+            run_id, index, "error", {"reason": "model_misconfigured", "detail": str(exc)}, worker_id
+        )
+        return None
+
     if state.unjudged_answer is not None:  # died after the last model_call, before judging it
         outcome, result, index = _judge(
             run_id, index, state.unjudged_answer, worker_id, messages, repairs_used
@@ -171,7 +212,7 @@ def run_agent(
 
     # --- Died mid-tool: run what the last reply asked for but never got back ---
     for tc in state.pending_tool_calls:
-        index = _run_tool(run_id, domain, index, tc, worker_id, messages)
+        index = _run_tool(run_id, domain, index, tc, worker_id, messages, tools)
 
     for turn in range(state.turns_used, MAX_TURNS):
         # --- C: still ours? Check before spending money. ---
@@ -196,11 +237,11 @@ def run_agent(
         try:
             with tracer().start_as_current_span(
                 "relay.model_call",
-                attributes={"gen_ai.request.model": settings.model_planner, "relay.turn": turn},
+                attributes={"gen_ai.request.model": model, "relay.turn": turn},
             ) as span:
                 response, attempts = call_with_retries(
                     lambda: llm.call(
-                        model=settings.model_planner,
+                        model=model,
                         system=SYSTEM_PROMPT,
                         messages=messages,
                         tools=TOOL_SCHEMAS,
@@ -247,12 +288,17 @@ def run_agent(
 
         # --- J: the model must remember what it asked for ---
         messages.append(
-            {
-                "role": "assistant",
-                "content": response.content,
-                "tool_calls": [asdict(tc) for tc in response.tool_calls],
-            }
+            assistant_message(
+                response.content,
+                [asdict(tc) for tc in response.tool_calls],
+                response.raw_content,
+            )
         )
+
+        # --- a billed reply with no usable outcome (refusal, max_tokens): end the run ---
+        if response.stop_reason in STOP_ERRORS:
+            _stop_error(run_id, index, response.stop_reason, worker_id)
+            return None
 
         # --- G: final answer? Judge it through the repair ladder. ---
         if response.stop_reason == "end_turn":
@@ -266,7 +312,7 @@ def run_agent(
 
         # --- H, F, A, K: for each tool the model asked for ---
         for tc in response.tool_calls:
-            index = _run_tool(run_id, domain, index, tc, worker_id, messages)
+            index = _run_tool(run_id, domain, index, tc, worker_id, messages, tools)
 
     # --- L: MAX_TURNS passed with no final answer ---
     append_step(run_id, index, "error", {"reason": "max_turns", "max_turns": MAX_TURNS}, worker_id)

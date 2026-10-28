@@ -28,6 +28,20 @@ from psycopg.rows import dict_row
 
 from relay.llm.client import ToolCall
 
+STOPS_WITHOUT_OUTCOME = ("refusal", "max_tokens", "other")  # billed, nothing to act on (P1)
+
+
+def assistant_message(content: str, tool_calls: list[Any], raw: Any) -> dict[str, Any]:
+    """The assistant turn, built identically by the loop and by replay.
+
+    With a real model the reply blocks (`raw`) ride along and are sent back
+    verbatim: a thinking block is only valid in a byte-identical conversation.
+    """
+    msg: dict[str, Any] = {"role": "assistant", "content": content, "tool_calls": tool_calls}
+    if raw:
+        msg["raw"] = raw
+    return msg
+
 
 def user_message(domain: str) -> dict[str, Any]:
     """The run's opening message. Word for word what the Day 5 loop built."""
@@ -45,6 +59,7 @@ class ReplayState:
     final: dict[str, Any] | None = None  # payload of a `final` row: the run is already done
     failed: bool = False  # an `error` / `budget_exceeded` row with no `requeued` row after it
     unjudged_answer: str | None = None  # last reply was end_turn, died before final/error
+    unhandled_stop: str | None = None  # last reply was a billed refusal/max_tokens, no error yet
 
 
 def rebuild_messages(rows: Sequence[Mapping[str, Any]]) -> ReplayState:
@@ -65,9 +80,7 @@ def rebuild_messages(rows: Sequence[Mapping[str, Any]]) -> ReplayState:
         if kind == "run_started":
             messages.append(user_message(p["domain"]))
         elif kind == "model_call":
-            messages.append(
-                {"role": "assistant", "content": p["content"], "tool_calls": p["tool_calls"]}
-            )
+            messages.append(assistant_message(p["content"], p["tool_calls"], p.get("raw_content")))
             turns_used += 1
             spent += float(p["cost_usd"])
             last_reply = p
@@ -105,6 +118,17 @@ def rebuild_messages(rows: Sequence[Mapping[str, Any]]) -> ReplayState:
 
     if failed:
         return ReplayState(messages, next_index, turns_used, spent, repairs, failed=True)
+
+    # The worker died after a billed reply with no usable outcome, before failing the run.
+    if last_reply is not None and last_reply["stop_reason"] in STOPS_WITHOUT_OUTCOME:
+        return ReplayState(
+            messages,
+            next_index,
+            turns_used,
+            spent,
+            repairs,
+            unhandled_stop=last_reply["stop_reason"],
+        )
 
     # The worker died after writing a final-looking reply but before judging it.
     if last_reply is not None and last_reply["stop_reason"] == "end_turn":

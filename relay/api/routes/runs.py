@@ -58,7 +58,11 @@ def create_run(
         )
     try:
         created = repo.create_run(
-            principal.tenant_id, body.domain, principal.max_concurrent_runs, idempotency_key
+            principal.tenant_id,
+            body.domain,
+            principal.max_concurrent_runs,
+            idempotency_key,
+            principal.run_mode,
         )
     except repo.IdempotencyMismatch as exc:
         raise HTTPException(

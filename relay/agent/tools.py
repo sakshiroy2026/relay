@@ -47,6 +47,7 @@ class ToolContext:
     domain: str  # the run's own domain (runs.input), not one the model names
     step_index: int  # index of this call's tool_call row
     idem_key: str  # '<run_id>:<tool_call_id>': the same on every re-run of this call
+    tools_provider: str = ""  # "fake" / "real" for this run (its mode); "" = the process default
 
 
 # ── What the model must send for each tool ─────────────────────────────
@@ -282,8 +283,9 @@ _INTERNAL_TOOLS = (
 def _real_web_search(args: WebSearchInput, _ctx: ToolContext | None) -> str:
     from relay.agent import real_tools
 
-    key = settings.tavily_api_key or ""  # presence is checked when the registry is built
-    results = real_tools.tavily_search(args.query.strip(), key)
+    if not settings.tavily_api_key:  # a live run on a worker without the key
+        raise ToolError("web_search is not configured on this worker; continue without it")
+    results = real_tools.tavily_search(args.query.strip(), settings.tavily_api_key)
     return json.dumps([r.model_dump(mode="json") for r in results])
 
 
@@ -309,17 +311,37 @@ _REAL_TOOLS = tuple(
 )
 
 
-def _build_registry() -> dict[str, Tool]:
-    if settings.tools_provider == "fake":
+def _build_registry(provider: str | None = None, strict: bool = True) -> dict[str, Tool]:
+    provider = provider or settings.tools_provider
+    if provider == "fake":
         return {tool.name: tool for tool in (*_FAKE_TOOLS, *_INTERNAL_TOOLS)}
-    if settings.tools_provider == "real":
-        if not settings.tavily_api_key:  # fail at boot, not in the middle of a paid run
+    if provider == "real":
+        if strict and not settings.tavily_api_key:  # the process default: fail at boot
             raise RuntimeError("TOOLS_PROVIDER=real needs TAVILY_API_KEY in the environment")
         return {tool.name: tool for tool in (*_REAL_TOOLS, *_INTERNAL_TOOLS)}
-    raise RuntimeError(f"no tools for provider {settings.tools_provider!r}")
+    raise RuntimeError(f"no tools for provider {provider!r}")
 
 
+# The process default registry; a run whose mode picks the other provider gets
+# its registry from registry_for (built once, on first use).
 REGISTRY: dict[str, Tool] = _build_registry()
+_OTHER_REGISTRIES: dict[str, dict[str, Tool]] = {}
+
+
+def registry_for(provider: str) -> dict[str, Tool]:
+    if not provider or provider == settings.tools_provider:
+        return REGISTRY
+    if provider not in _OTHER_REGISTRIES:
+        # not strict: a missing Tavily key makes web_search answer ok=False, not crash
+        _OTHER_REGISTRIES[provider] = _build_registry(provider, strict=False)
+    return _OTHER_REGISTRIES[provider]
+
+
+def breaker_key(name: str, provider: str) -> str:
+    """Fake and real tools never share a breaker row: a fake success must not close a
+    real outage. The fake keeps the bare name (Day 8's rows and proofs)."""
+    return name if provider in ("", "fake") else f"{name}@{provider}"
+
 
 # The menu shown to the model: generated from the same Pydantic models that validate the args.
 TOOL_SCHEMAS: list[dict[str, Any]] = [
@@ -333,10 +355,12 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
 
 
 def dispatch_tool(name: str, args: dict[str, Any], ctx: ToolContext | None = None) -> ToolResult:
-    tool = REGISTRY.get(name)
+    provider = (ctx.tools_provider if ctx is not None else "") or settings.tools_provider
+    registry = registry_for(provider)
+    tool = registry.get(name)
     if tool is None:
         return ToolResult(
-            ok=False, content=f"unknown tool {name!r}; choose from {sorted(REGISTRY)}"
+            ok=False, content=f"unknown tool {name!r}; choose from {sorted(registry)}"
         )
 
     try:
@@ -348,7 +372,8 @@ def dispatch_tool(name: str, args: dict[str, Any], ctx: ToolContext | None = Non
     # The breaker is checked once per dispatch, not per retry: if the tool is
     # known-down we don't even make the first attempt. The model is told and
     # asked to adapt instead of the run crashing (blueprint §9).
-    if not breaker.allow(name):
+    bkey = breaker_key(name, provider)
+    if not breaker.allow(bkey):
         return ToolResult(
             ok=False,
             content=(
@@ -362,7 +387,7 @@ def dispatch_tool(name: str, args: dict[str, Any], ctx: ToolContext | None = Non
         content, attempts = call_with_retries(
             lambda: tool.run(validated, ctx),
             attempts=TOOL_RETRY_ATTEMPTS,
-            on_failure=lambda _exc: breaker.record_failure(name),
+            on_failure=lambda _exc: breaker.record_failure(bkey),
         )
     except ToolError as exc:
         # A model mistake (404, bad URL): the tool itself is healthy, so the
@@ -376,5 +401,5 @@ def dispatch_tool(name: str, args: dict[str, Any], ctx: ToolContext | None = Non
             attempts=TOOL_RETRY_ATTEMPTS,
         )
 
-    breaker.record_success(name)
+    breaker.record_success(bkey)
     return ToolResult(ok=True, content=content, attempts=attempts)

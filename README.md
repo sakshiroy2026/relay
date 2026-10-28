@@ -42,7 +42,7 @@ Instead of an agent loop living in a process that dies when the process dies, ev
 | Prometheus `/metrics` + `/ops` dashboard compiled from the ledger; OTel traces with `steps.trace_id` | ✅ working (screenshot above), 5 tests |
 | SSE for the demo page (LISTEN/NOTIFY push, fetch-streaming, polling fallback) | ✅ median 3.7 ms push latency, browser-tested, 5 tests |
 | Dead-letter queue (reaper for exhausted runs, `requeued` ledger marker, operator CLI) | ✅ measured: requeued runs resume from their ledger, 0 restarts (results below) |
-| Real model provider | 🔨 next (everything so far runs on a scripted fake model) |
+| Real model provider (Claude Haiku 5.5 via the official SDK; raw reply blocks replayed verbatim so thinking signatures stay valid across crashes; per-tenant `demo`/`live` mode) | ✅ built and tested through the SDK with a mock transport ($0); first paid run pending the key (details: [`learn/P1_REAL_MODEL.md`](learn/P1_REAL_MODEL.md)) |
 | Public deployment | ⬜ planned |
 
 ---

@@ -15,6 +15,7 @@ from relay.config import settings
 from relay.core.dlq import reap_exhausted
 from relay.core.ledger import LeaseLost
 from relay.db import pool
+from relay.llm.factory import preflight
 from relay.obs.tracing import setup, tracer
 
 # ── 1. settings ──────────────────────────────────────────────────────────
@@ -111,6 +112,7 @@ def run_once() -> bool:
 
     run_id = run["id"]
     domain = run["input"]["domain"]  # E
+    mode = run["input"].get("mode")  # P1: "demo" / "live"; absent on harness and old runs
     budget_usd = float(run["budget_usd"])  # NUMERIC column -> Decimal; money is a float estimate
     print(f"[{WORKER_ID}] claimed {run_id} (attempt {run['attempt_count']})", flush=True)
 
@@ -126,9 +128,10 @@ def run_once() -> bool:
                 "relay.run_id": str(run_id),
                 "relay.attempt": run["attempt_count"],
                 "relay.worker_id": WORKER_ID,
+                "relay.mode": mode or "default",
             },
         ) as span:
-            result = run_agent(run_id, domain, WORKER_ID, beat, budget_usd)  # A
+            result = run_agent(run_id, domain, WORKER_ID, beat, budget_usd, mode)  # A
             span.set_attribute("relay.outcome", "failed" if result is None else "succeeded")
     except LeaseLost as exc:  # D
         print(f"[{WORKER_ID}] lease_lost {str(run_id)[:8]}: {exc}", flush=True)
@@ -151,6 +154,8 @@ def run_once() -> bool:
 # ── 6. the poll loop ─────────────────────────────────────────────────────
 def main() -> None:
     setup("relay-worker")
+    for warning in preflight():  # no network: what this worker can and can't run
+        print(f"[{WORKER_ID}] preflight: {warning}", flush=True)
     print(f"[{WORKER_ID}] started", flush=True)
     try:
         while True:
