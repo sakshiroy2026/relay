@@ -126,6 +126,7 @@ def get_run(tenant_id: UUID, run_id: UUID) -> dict[str, Any] | None:
                 """
                 SELECT id, status, input, result, error,
                        attempt_count, next_step_index, lease_owner,
+                       lease_expires_at, now() AS server_now,
                        spent_usd, budget_usd, tokens_in, tokens_out,
                        agent_version, created_at, started_at, finished_at
                 FROM runs
@@ -150,6 +151,32 @@ def get_run_steps(tenant_id: UUID, run_id: UUID) -> list[dict[str, Any]]:
                 (run_id, tenant_id),
             )
             return cur.fetchall()
+
+
+def request_crash(tenant_id: UUID, run_id: UUID) -> str | None:
+    """Demo page: ask the worker that owns this run to die at its next heartbeat.
+
+    Returns "requested", "not_running" (exists but has no live owner to kill),
+    or None (no such run in this tenant). The route has already checked the
+    tenant is demo-mode; this only flips the flag the worker polls.
+    """
+    with pool.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE runs SET crash_requested_at = now()
+                WHERE id = %s AND tenant_id = %s
+                  AND status = 'running' AND lease_owner IS NOT NULL
+                """,
+                (run_id, tenant_id),
+            )
+            if cur.rowcount == 1:
+                return "requested"
+            cur.execute(
+                "SELECT 1 FROM runs WHERE id = %s AND tenant_id = %s",
+                (run_id, tenant_id),
+            )
+            return None if cur.fetchone() is None else "not_running"
 
 
 def get_company(tenant_id: UUID, domain: str) -> dict[str, Any] | None:

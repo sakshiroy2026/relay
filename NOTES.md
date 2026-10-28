@@ -310,3 +310,15 @@ goes to Render's free plan: deploy/single/ = one container (API + 2 workers,
 start.sh restart loop), Neon unchanged, HTTPS/URL from Render, Caddy/DuckDNS
 dropped. Verified locally under Render's limits (512 MB / 0.1 CPU): 120 MB
 steady, demo run in ~12 s. The Oracle/VM files stay for a future real server.
+
+## Demo page v2 + the "Kill the worker" button (29 Oct)
+
+Built by Claude Code; see learn/CRASH_BUTTON.md. Explain-back owed.
+The page is now a recruiter-facing showcase (hero with the measured chaos
+numbers, example domains, a three-card explainer), and any visitor can crash
+the owning worker from the page: POST /v1/runs/{id}/crash (migration 009,
+demo-mode tenants only) arms a one-shot flag the worker clears and obeys with
+os._exit(137) at its next heartbeat; lease expiry + replay do the rest.
+Verified live in the browser (run 484b68fe: killed at step 11, resumed at 12,
+4 model_call rows like an uncrashed run). Render image: LEASE_SECONDS=15,
+FAKE_DELAY_SECONDS=2.5 — at 0.5 s a run finished in ~7 s, too fast to click.

@@ -3,116 +3,246 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Relay — live run</title>
+<title>Relay — kill the worker, the run survives</title>
+<meta name="description" content="Relay is a durable execution runtime for LLM agents: every step is written to a Postgres ledger, so a killed worker's run is resumed by another worker — nothing paid twice, nothing written twice.">
 <style>
   :root {
-    --bg: #f6f7f9; --panel: #ffffff; --ink: #1c2330; --muted: #667085; --line: #e3e7ee;
-    --accent: #2f6fed; --ok: #13804b; --bad: #c2352b; --warn-bg: #fff4d6; --warn-ink: #7a4d00;
-    --chip: #eef1f6; --mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+    --bg: #f7f7f5; --panel: #ffffff; --ink: #1a2130; --muted: #5f6b7e; --line: #e4e6ea;
+    --accent: #2f6fed; --accent-ink: #ffffff; --ok: #117a46; --bad: #c2352b;
+    --warn-bg: #fff4d6; --warn-ink: #7a4d00; --chip: #eef0f4; --hero: #10151f;
+    --hero-ink: #f2f4f8; --hero-muted: #9aa6ba; --kill: #d23b2f;
+    --mono: ui-monospace, "Cascadia Code", Consolas, monospace;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #0f131a; --panel: #171c25; --ink: #e6e9ef; --muted: #98a2b3; --line: #273041;
+      --bg: #0e1218; --panel: #161b24; --ink: #e7eaf0; --muted: #96a0b3; --line: #262e3d;
       --accent: #6c9bff; --ok: #3ccf87; --bad: #ff6b5f; --warn-bg: #3a2e10; --warn-ink: #ffd27a;
-      --chip: #222a37;
+      --chip: #212936; --hero: #0a0e15; --hero-ink: #eef1f7; --hero-muted: #8d99af; --kill: #e35448;
     }
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }  /* beat .killrow's display:flex etc. */
   body { margin: 0; background: var(--bg); color: var(--ink);
-         font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-  header { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center;
-           padding: 16px 24px; border-bottom: 1px solid var(--line); background: var(--panel); }
-  header h1 { margin: 0; font-size: 20px; letter-spacing: .2px; }
-  header .tag { color: var(--muted); font-size: 13px; }
-  header .key { margin-left: auto; display: flex; gap: 8px; align-items: center; font-size: 13px; }
-  main { max-width: 1180px; margin: 0 auto; padding: 20px 16px 48px; }
-  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
-  input, button { font: inherit; border-radius: 8px; border: 1px solid var(--line);
-                  background: var(--panel); color: var(--ink); padding: 8px 10px; }
+         font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* ── header + hero ─────────────────────────────────────────────── */
+  .dark { background: var(--hero); color: var(--hero-ink); }
+  header { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: baseline;
+           max-width: 1100px; margin: 0 auto; padding: 18px 20px 0; }
+  header .logo { font-size: 19px; font-weight: 700; letter-spacing: .3px; color: var(--hero-ink); }
+  header nav { margin-left: auto; display: flex; gap: 18px; font-size: 14px; }
+  header nav a { color: var(--hero-muted); }
+  .hero { max-width: 1100px; margin: 0 auto; padding: 36px 20px 30px; }
+  .hero h1 { margin: 0 0 10px; font-size: clamp(26px, 4.5vw, 40px); line-height: 1.15; letter-spacing: -.5px; }
+  .hero h1 em { font-style: normal; color: var(--accent); }
+  .hero > p { margin: 0; max-width: 62ch; color: var(--hero-muted); font-size: 16px; }
+  .hero > p strong { color: var(--hero-ink); font-weight: 600; }
+  .stats { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
+  .stats .stat { background: color-mix(in srgb, var(--hero-ink) 7%, transparent);
+                 border: 1px solid color-mix(in srgb, var(--hero-ink) 14%, transparent);
+                 border-radius: 10px; padding: 10px 14px; min-width: 150px; }
+  .stats .n { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .stats .l { font-size: 12.5px; color: var(--hero-muted); margin-top: 2px; }
+  .hero .measured { margin-top: 10px; font-size: 12.5px; color: var(--hero-muted); }
+
+  /* ── main ──────────────────────────────────────────────────────── */
+  main { max-width: 1100px; margin: 0 auto; padding: 24px 20px 56px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
+  h2 { font-size: 13px; margin: 0 0 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .7px; }
+  .howto { display: flex; flex-wrap: wrap; gap: 6px 26px; margin: 0 0 14px; padding: 0; list-style: none;
+           counter-reset: s; font-size: 14px; color: var(--muted); }
+  .howto li { counter-increment: s; }
+  .howto li::before { content: counter(s); display: inline-block; width: 20px; height: 20px; margin-right: 7px;
+                      border-radius: 50%; background: var(--chip); color: var(--ink);
+                      font-size: 12px; font-weight: 700; text-align: center; line-height: 20px; }
+  input, button { font: inherit; border-radius: 9px; border: 1px solid var(--line);
+                  background: var(--panel); color: var(--ink); padding: 9px 12px; }
   input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
-  button { cursor: pointer; background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
-  button.ghost { background: transparent; color: var(--muted); border-color: var(--line); font-weight: 500; }
+  button { cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  button.ghost { background: transparent; color: var(--muted); }
   button:disabled { opacity: .5; cursor: default; }
-  .start { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px; }
-  .start input[name=domain] { flex: 1 1 260px; }
-  .msg { color: var(--bad); font-size: 13px; min-height: 18px; margin: -8px 0 12px; }
-  .runhead { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 12px; }
-  .stat .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .6px; }
-  .stat .value { font-size: 18px; font-weight: 600; margin-top: 2px; overflow-wrap: anywhere; }
-  .pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 14px; font-weight: 600; background: var(--chip); }
-  .pill.succeeded { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
-  .pill.failed, .pill.dead { background: color-mix(in srgb, var(--bad) 18%, transparent); color: var(--bad); }
-  .pill.running { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
-  .bar { height: 6px; border-radius: 3px; background: var(--chip); margin-top: 6px; overflow: hidden; }
+  .start { display: flex; flex-wrap: wrap; gap: 8px; }
+  .start input[name=domain] { flex: 1 1 240px; }
+  .examples { margin-top: 10px; font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .examples button { font-size: 13px; padding: 3px 10px; border-radius: 999px; background: var(--chip); border-color: transparent; }
+  .coldstart { margin-top: 10px; font-size: 12.5px; color: var(--muted); }
+  details.adv { margin-top: 12px; font-size: 13px; color: var(--muted); }
+  details.adv summary { cursor: pointer; }
+  details.adv .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+  .msg { color: var(--bad); font-size: 13px; min-height: 18px; margin: 8px 0 0; }
+
+  /* ── the live run ──────────────────────────────────────────────── */
+  #runSection { margin-top: 18px; }
+  .runhead { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; }
+  .stat .label { color: var(--muted); font-size: 11.5px; text-transform: uppercase; letter-spacing: .6px; }
+  .stat .value { font-size: 17px; font-weight: 600; margin-top: 2px; overflow-wrap: anywhere; }
+  .pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 13.5px; font-weight: 600; background: var(--chip); }
+  .pill.succeeded { background: color-mix(in srgb, var(--ok) 16%, transparent); color: var(--ok); }
+  .pill.failed, .pill.dead { background: color-mix(in srgb, var(--bad) 16%, transparent); color: var(--bad); }
+  .pill.running { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
+  .bar { height: 5px; border-radius: 3px; background: var(--chip); margin-top: 7px; overflow: hidden; }
   .bar > div { height: 100%; background: var(--accent); width: 0; transition: width .4s; }
-  .banner { display: none; margin-bottom: 12px; padding: 12px 14px; border-radius: 10px;
-            background: var(--warn-bg); color: var(--warn-ink); font-weight: 600; }
-  .banner small { display: block; font-weight: 400; margin-top: 2px; }
-  .killhint { display: none; margin-bottom: 12px; font-size: 13px; color: var(--muted); }
-  .killhint code { font-family: var(--mono); background: var(--chip); padding: 2px 6px; border-radius: 6px; color: var(--ink); }
-  .grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 16px; }
-  @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } header .key { margin-left: 0; } }
-  h2 { font-size: 14px; margin: 0 0 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; }
+  .killrow { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; margin-top: 14px;
+             padding-top: 14px; border-top: 1px dashed var(--line); }
+  #killBtn { background: var(--kill); border-color: var(--kill); color: #fff; font-weight: 700; padding: 10px 18px; }
+  .killrow .why { font-size: 12.5px; color: var(--muted); max-width: 46ch; }
+  #killState { display: none; margin-top: 12px; padding: 11px 14px; border-radius: 10px;
+               background: var(--warn-bg); color: var(--warn-ink); font-size: 14px; font-weight: 600;
+               font-variant-numeric: tabular-nums; }
+  .banner { display: none; margin-top: 12px; padding: 12px 14px; border-radius: 10px;
+            background: color-mix(in srgb, var(--ok) 12%, transparent); color: var(--ok); font-weight: 600; }
+  .banner small { display: block; font-weight: 400; margin-top: 2px; color: var(--muted); }
+
+  .grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 16px; margin-top: 16px; }
+  @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } header nav { margin-left: 0; } }
   ol.steps { list-style: none; margin: 0; padding: 0; }
-  ol.steps li { display: grid; grid-template-columns: 34px 104px 88px 1fr; gap: 8px; align-items: baseline;
+  ol.steps li { display: grid; grid-template-columns: 30px 110px 84px 1fr; gap: 8px; align-items: baseline;
                 padding: 7px 4px; border-top: 1px solid var(--line); animation: arrive .5s ease; }
   ol.steps li.takeover { border-top: 2px solid var(--warn-ink); }
   @keyframes arrive { from { background: color-mix(in srgb, var(--accent) 16%, transparent); } to { background: transparent; } }
-  .idx { font-family: var(--mono); color: var(--muted); text-align: right; }
+  .idx { font-family: var(--mono); color: var(--muted); text-align: right; font-size: 12px; }
   .kind { font-family: var(--mono); font-size: 12px; padding: 1px 6px; border-radius: 6px; background: var(--chip); justify-self: start; }
   .kind.model_call { color: var(--accent); }
   .kind.final { color: var(--ok); }
   .kind.error, .kind.budget_exceeded { color: var(--bad); }
   .who { font-family: var(--mono); font-size: 12px; padding: 1px 6px; border-radius: 6px; color: #fff; justify-self: start; }
   .sum { font-size: 13px; overflow-wrap: anywhere; }
-  .sum .t { color: var(--muted); font-family: var(--mono); font-size: 12px; margin-right: 6px; }
+  .sum .t { color: var(--muted); font-family: var(--mono); font-size: 11.5px; margin-right: 6px; }
   pre { margin: 0; font-family: var(--mono); font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
   .side .panel + .panel { margin-top: 16px; }
   .empty { color: var(--muted); font-size: 13px; }
+
+  /* ── how it works ──────────────────────────────────────────────── */
+  .how { margin-top: 26px; }
+  .how .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+  .how .card h3 { margin: 0 0 6px; font-size: 15px; }
+  .how .card p { margin: 0; font-size: 13.5px; color: var(--muted); }
+  .how .card code { font-family: var(--mono); font-size: 12px; background: var(--chip); padding: 1px 5px; border-radius: 5px; }
+  footer { max-width: 1100px; margin: 0 auto; padding: 0 20px 40px; font-size: 13px; color: var(--muted);
+           display: flex; flex-wrap: wrap; gap: 6px 18px; }
 </style>
 </head>
 <body>
-<header>
-  <h1>Relay</h1>
-  <span class="tag">durable agent runs · every step written to a Postgres ledger</span>
-  <label class="key">API key
-    <input id="key" type="password" autocomplete="off" placeholder="rly_…" size="22">
-    <button id="forget" class="ghost" type="button">forget</button>
-  </label>
-</header>
+
+<div class="dark">
+  <header>
+    <span class="logo">Relay</span>
+    <nav>
+      <a href="https://github.com/sakshiroy2026/relay">GitHub</a>
+      <a href="/ops">ops dashboard</a>
+      <a href="https://github.com/sakshiroy2026/relay#measured-results">measured results</a>
+    </nav>
+  </header>
+  <section class="hero">
+    <h1>Kill the worker mid-run.<br><em>The run survives.</em></h1>
+    <p>Relay is a <strong>durable execution runtime for LLM agents</strong>: every model call and
+       tool call is appended to a Postgres ledger before it counts. When a worker dies, another
+       one replays the ledger and resumes at the exact step — <strong>no model call paid twice,
+       no side effect written twice</strong>. You can try the kill yourself, below.</p>
+    <div class="stats">
+      <div class="stat"><div class="n">196 / 196</div><div class="l">runs killed mid-run that still finished</div></div>
+      <div class="stat"><div class="n">0</div><div class="l">model calls paid twice</div></div>
+      <div class="stat"><div class="n">0</div><div class="l">duplicate side effects</div></div>
+      <div class="stat"><div class="n">15.6×</div><div class="l">throughput, 1 → 16 workers</div></div>
+    </div>
+    <div class="measured">measured by the repo's own chaos harness (200 runs, random <code>docker kill</code>) —
+      <a href="https://github.com/sakshiroy2026/relay/blob/main/chaos/results.json">raw numbers</a></div>
+  </section>
+</div>
 
 <main>
-  <form class="start" id="startForm">
-    <input name="domain" id="domain" placeholder="company domain, e.g. razorpay.com" required minlength="3">
-    <button id="startBtn" type="submit">Start run</button>
-    <input id="openId" placeholder="or open a run id" size="24">
-    <button id="openBtn" class="ghost" type="button">open</button>
-  </form>
-  <div class="msg" id="msg"></div>
-
-  <section class="panel runhead" id="runhead" hidden>
-    <div class="stat"><div class="label">Run</div><div class="value" id="rId">—</div></div>
-    <div class="stat"><div class="label">Status</div><div class="value"><span class="pill" id="rStatus">—</span></div></div>
-    <div class="stat"><div class="label">Attempt</div><div class="value" id="rAttempt">—</div></div>
-    <div class="stat"><div class="label">Cost so far</div><div class="value" id="rCost">—</div><div class="bar"><div id="rBar"></div></div></div>
-    <div class="stat"><div class="label">Owner now</div><div class="value" id="rOwner">—</div></div>
+  <section class="panel">
+    <h2>Try it live</h2>
+    <ol class="howto">
+      <li>Start a run — its ledger streams in below</li>
+      <li>Hit <b>Kill the worker</b> while it's running</li>
+      <li>Watch another worker take over at the next step</li>
+    </ol>
+    <form class="start" id="startForm">
+      <input name="domain" id="domain" placeholder="a company domain" required minlength="3">
+      <button id="startBtn" class="primary" type="submit">Start run</button>
+    </form>
+    <div class="examples" id="examples">try:</div>
+    <p class="coldstart">Free-tier host: a first visit after a quiet spell can take ~1 minute to wake. The public
+      demo runs a scripted fake model (same runtime, $0 spend), so the records it writes are canned, not researched.</p>
+    <details class="adv">
+      <summary>Your own API key / open an existing run</summary>
+      <div class="row">
+        <label>API key <input id="key" type="password" autocomplete="off" placeholder="rly_…" size="22"></label>
+        <button id="forget" class="ghost" type="button">forget</button>
+        <input id="openId" placeholder="run id" size="24">
+        <button id="openBtn" class="ghost" type="button">open run</button>
+      </div>
+    </details>
+    <div class="msg" id="msg"></div>
   </section>
 
-  <div class="banner" id="banner"></div>
-  <div class="killhint" id="killhint">To test a crash, kill the worker that owns this run: <code id="killcmd"></code></div>
+  <section id="runSection" hidden>
+    <div class="panel">
+      <div class="runhead">
+        <div class="stat"><div class="label">Run</div><div class="value" id="rId">—</div></div>
+        <div class="stat"><div class="label">Status</div><div class="value"><span class="pill" id="rStatus">—</span></div></div>
+        <div class="stat"><div class="label">Attempt</div><div class="value" id="rAttempt">—</div></div>
+        <div class="stat"><div class="label">Owner now</div><div class="value" id="rOwner">—</div></div>
+        <div class="stat"><div class="label">Cost so far</div><div class="value" id="rCost">—</div><div class="bar"><div id="rBar"></div></div></div>
+      </div>
+      <div class="killrow" id="killrow" hidden>
+        <button id="killBtn" type="button">💥 Kill the worker</button>
+        <span class="why">The exact effect of <code>docker kill</code> on the worker that owns this run:
+          no goodbye, no cleanup. Its lease has to expire before another worker may take over.</span>
+      </div>
+      <div id="killState"></div>
+      <div class="banner" id="banner"></div>
+    </div>
 
-  <div class="grid">
-    <section class="panel">
-      <h2>Ledger (steps table, live<span id="livemode"></span>)</h2>
-      <ol class="steps" id="steps"></ol>
-      <p class="empty" id="noSteps">Start a run to see its steps arrive.</p>
-    </section>
-    <aside class="side">
-      <section class="panel"><h2>Final record</h2><pre id="final" class="empty">—</pre></section>
-      <section class="panel"><h2>Saved company row</h2><pre id="company" class="empty">—</pre></section>
-    </aside>
-  </div>
+    <div class="grid">
+      <section class="panel">
+        <h2>The ledger (steps table, live<span id="livemode"></span>)</h2>
+        <ol class="steps" id="steps"></ol>
+        <p class="empty" id="noSteps">Steps appear here the moment they commit.</p>
+      </section>
+      <aside class="side">
+        <section class="panel"><h2>Final record</h2><pre id="final" class="empty">—</pre></section>
+        <section class="panel"><h2>Saved company row</h2><pre id="company" class="empty">—</pre></section>
+      </aside>
+    </div>
+  </section>
+
+  <section class="how">
+    <h2>How the takeover works</h2>
+    <div class="cards">
+      <div class="card panel">
+        <h3>1 · The ledger</h3>
+        <p>Every step is appended to the <code>steps</code> table before it counts — a model reply is
+          written (with its cost) before it is even judged, because the provider already billed for it.
+          The ledger is the execution log, the event stream, the trace and the eval record at once.</p>
+      </div>
+      <div class="card panel">
+        <h3>2 · Lease + fencing</h3>
+        <p>A claim expires after a lease unless the worker heartbeats. A dead worker needs no cleanup:
+          the timestamp passes and the claim query (<code>FOR UPDATE SKIP LOCKED</code>) reclaims the run.
+          A zombie that wakes up later is fenced by <code>UNIQUE (run_id, step_index)</code> — split-brain
+          protection from a constraint, not a lock service.</p>
+      </div>
+      <div class="card panel">
+        <h3>3 · Replay</h3>
+        <p>The new worker rebuilds the conversation with one ordered <code>SELECT</code> and continues at
+          the next free index. Finished model calls are never re-issued, and write tools are idempotent —
+          a per-call key and a unique constraint make a re-run return the stored result instead of
+          writing twice.</p>
+      </div>
+    </div>
+  </section>
 </main>
+
+<footer>
+  <span>Relay — a resume project by Sakshi Roy</span>
+  <a href="https://github.com/sakshiroy2026/relay">source + README</a>
+  <a href="https://github.com/sakshiroy2026/relay#deliberately-excluded">what it deliberately leaves out</a>
+</footer>
 
 <script>
 "use strict";
@@ -121,15 +251,25 @@ const $ = (id) => document.getElementById(id);
 const KEY_STORE = "relay.apiKey";
 const PALETTE = ["#0f8b8d", "#d9730d", "#7b4bd6", "#c2185b", "#2e7d32", "#5d6d7e"];
 const TERMINAL = new Set(["succeeded", "failed", "dead"]);
+const EXAMPLES = ["razorpay.com", "stripe.com", "anthropic.com", "github.com"];
 
 let runId = null, timer = null, shownSteps = 0, companyShown = false;
 let workerColors = new Map();
+// the kill flow: null | {phase: "arming"|"waiting", owner, leaseEnd, skewMs}
+let kill = null, killTicker = null;
+
+for (const d of EXAMPLES) {
+  const b = document.createElement("button");
+  b.type = "button"; b.textContent = d;
+  b.addEventListener("click", () => { $("domain").value = d; $("startForm").requestSubmit(); });
+  $("examples").append(b);
+}
 
 function loadKey() { try { return localStorage.getItem(KEY_STORE) || ""; } catch { return ""; } }
 function saveKey(v) { try { v ? localStorage.setItem(KEY_STORE, v) : localStorage.removeItem(KEY_STORE); } catch {} }
 $("key").value = loadKey();
-// Deployment: no key of your own? The server may offer a public demo key (its
-// tenant runs the free scripted model; the server refuses to offer a paid one).
+// No key of your own? The server may offer a public demo key (its tenant runs
+// the free scripted model; the server refuses to offer a paid one).
 if (!$("key").value) {
   fetch("/demo-config").then((r) => r.json()).then((c) => {
     if (c.demo_key && !$("key").value) {
@@ -145,7 +285,13 @@ function say(text, tone) {  // tone "info" = a neutral note; anything else = an 
   $("msg").textContent = text || "";
   $("msg").style.color = tone === "info" ? "var(--muted)" : "";
 }
-function shortWorker(w) { return w === "api" ? "api" : w.split(":")[0].slice(0, 6); }
+function shortWorker(w) {
+  // workers are "<hostname>:<pid>". Keep the pid: in a one-container deploy
+  // every worker shares the hostname, and the pid is what tells them apart.
+  if (w === "api") return "api";
+  const [host, pid] = w.split(":");
+  return pid ? `${host.slice(0, 6)}:${pid}` : host.slice(0, 6);
+}
 function colorFor(w) {
   if (w === "api") return "#8a94a6";
   if (!workerColors.has(w)) workerColors.set(w, PALETTE[workerColors.size % PALETTE.length]);
@@ -158,21 +304,33 @@ async function api(path, options = {}) {
     ...options,
     headers: { "Content-Type": "application/json", "Authorization": "Bearer " + key, ...(options.headers || {}) },
   });
-  if (res.status === 401) throw new Error("API key missing or wrong: paste it in the box at the top right.");
+  if (res.status === 401) throw new Error("API key missing or wrong: open the key box under the form.");
   if (res.status === 503) throw new Error("The server has no API key configured.");
-  if (!res.ok) { const e = new Error(`${res.status} ${res.statusText}`); e.status = res.status; throw e; }
-  return res.json();
+  if (!res.ok) {
+    let detail = "";
+    try { detail = (await res.json()).detail || ""; } catch {}
+    const e = new Error(detail || `${res.status} ${res.statusText}`); e.status = res.status; throw e;
+  }
+  return res.status === 204 ? null : res.json();
+}
+
+function stopKillUi() {
+  kill = null;
+  clearInterval(killTicker); killTicker = null;
+  $("killState").style.display = "none";
 }
 
 function reset(id) {
   clearTimeout(timer);
+  stopKillUi();
   runId = id; shownSteps = 0; companyShown = false; workerColors = new Map();
   $("steps").replaceChildren();
   $("noSteps").hidden = false;
   $("banner").style.display = "none"; $("banner").replaceChildren();
   $("final").textContent = "—"; $("final").className = "empty";
   $("company").textContent = "—"; $("company").className = "empty";
-  $("runhead").hidden = false;
+  $("runSection").hidden = false;
+  $("runSection").scrollIntoView({ behavior: "smooth", block: "nearest" });
   try { history.replaceState(null, "", "#run=" + id); } catch {}
 }
 
@@ -198,6 +356,67 @@ $("openBtn").addEventListener("click", () => {
   if (id) { say(""); reset(id); stream(); }
 });
 
+// ── the kill button ────────────────────────────────────────────────────────
+$("killBtn").addEventListener("click", async () => {
+  if (!runId) return;
+  $("killBtn").disabled = true;
+  try {
+    await api(`/v1/runs/${runId}/crash`, { method: "POST" });
+    kill = { phase: "arming", owner: null, leaseEnd: 0, skewMs: 0 };
+    killState("💣 Crash requested — the worker dies at its next heartbeat…");
+    if (!killTicker) killTicker = setInterval(renderKill, 250);
+  } catch (e) {
+    say(e.message);
+    $("killBtn").disabled = false;
+  }
+});
+
+function killState(text) {
+  $("killState").textContent = text;
+  $("killState").style.display = "block";
+}
+
+function renderKill() {
+  if (!kill || kill.phase !== "waiting") return;
+  const left = (kill.leaseEnd - (Date.now() - kill.skewMs)) / 1000;
+  if (left > 0) {
+    killState(`💀 Worker ${shortWorker(kill.owner)} is dead. Its lease expires in ${left.toFixed(1)} s — ` +
+      "until then the run still belongs to a corpse.");
+  } else {
+    killState("⏳ Lease expired — the next free worker claims the run and replays the ledger…");
+  }
+}
+
+function noteKillFromRun(run) {
+  if (!kill) return;
+  const t = TERMINAL.has(run.status);
+  if (kill.phase === "arming" && run.lease_owner) {
+    // remember whose head is on the block, and when its lease runs out
+    kill.owner = kill.owner || run.lease_owner;
+    if (run.lease_expires_at) {
+      kill.leaseEnd = new Date(run.lease_expires_at).getTime();
+      kill.skewMs = run.server_now ? Date.now() - new Date(run.server_now).getTime() : 0;
+      kill.phase = "waiting";
+    }
+  } else if (kill.phase === "waiting" && run.lease_owner === kill.owner && run.lease_expires_at) {
+    // the owner was still alive at its last heartbeat: its lease moved, so follow it
+    kill.leaseEnd = new Date(run.lease_expires_at).getTime();
+  } else if (kill.phase === "waiting" && run.lease_owner && run.lease_owner !== kill.owner) {
+    killState(`✅ Worker ${shortWorker(run.lease_owner)} took over (attempt ${run.attempt_count}) — ` +
+      "it replayed the ledger and resumed. Model calls already in the ledger were not paid again.");
+    clearInterval(killTicker); killTicker = null;
+    kill = null;
+  }
+  if (t && kill) {
+    if (kill.phase === "arming") {
+      killState("The run finished before the worker's next heartbeat — kill it earlier next time.");
+    }
+    clearInterval(killTicker); killTicker = null;
+    kill = null;
+  }
+}
+
+// ── rendering ──────────────────────────────────────────────────────────────
 function renderRun(run) {
   $("rId").textContent = String(run.id).slice(0, 8);
   $("rStatus").textContent = run.status;
@@ -206,11 +425,11 @@ function renderRun(run) {
   const spent = Number(run.spent_usd), budget = Number(run.budget_usd);
   $("rCost").textContent = `$${spent.toFixed(4)} of $${budget.toFixed(2)}`;
   $("rBar").style.width = Math.min(100, budget > 0 ? (spent / budget) * 100 : 0) + "%";
-  const owner = run.lease_owner ? shortWorker(run.lease_owner) : "—";
-  $("rOwner").textContent = owner;
+  $("rOwner").textContent = run.lease_owner ? shortWorker(run.lease_owner) : "—";
   const running = run.status === "running" && run.lease_owner;
-  $("killhint").style.display = running ? "block" : "none";
-  if (running) $("killcmd").textContent = "docker kill " + run.lease_owner.split(":")[0];
+  $("killrow").hidden = !running;
+  if (running && !kill) $("killBtn").disabled = false;
+  noteKillFromRun(run);
   if (run.result && $("final").className === "empty") {
     $("final").textContent = JSON.stringify(run.result, null, 2); $("final").className = "";
   }
@@ -294,7 +513,7 @@ async function stream() {
     const res = await fetch(`/v1/runs/${id}/events`, {
       headers: { "Authorization": "Bearer " + $("key").value.trim() },
     });
-    if (res.status === 401) throw new Error("API key missing or wrong: paste it in the box at the top right.");
+    if (res.status === 401) throw new Error("API key missing or wrong: open the key box under the form.");
     if (!res.ok || !res.body) throw new Error(`${res.status} ${res.statusText}`);
     const reader = res.body.getReader();
     const decoder = new TextDecoder();

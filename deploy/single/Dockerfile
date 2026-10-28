@@ -7,9 +7,16 @@ FROM python:3.13-slim
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    # the public demo runs the free scripted model; slow it a little so a
-    # visitor can watch the steps stream in (and a worker can die mid-run)
-    FAKE_DELAY_SECONDS=0.5
+    # the public demo runs the free scripted model; slow it down so a visitor
+    # can watch the steps stream in AND has a ~10 s window to press "Kill the
+    # worker" before the run finishes (a run is 4 model calls: at 0.5 s it was
+    # over in ~7 s, before most people find the button)
+    FAKE_DELAY_SECONDS=2.5 \
+    # demo lease: after "Kill the worker" the takeover waits for the lease to
+    # expire, and nobody watches a 90 s pause. 15 s is the chaos harness's
+    # test lease; safe here because the fake model answers in ~0.5 s. Remove
+    # this line (back to 90 s) the day the service runs live paid models.
+    LEASE_SECONDS=15
 
 RUN useradd -m -u 1000 relay
 

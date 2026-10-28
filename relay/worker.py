@@ -56,6 +56,30 @@ def claim_run() -> dict[str, Any] | None:
     return row
 
 
+# ── 3a. demo crash (one-shot) ────────────────────────────────────────────
+def crash_if_requested(run_id: UUID) -> None:
+    """Die like `docker kill` when the demo page asked for a crash.
+
+    The flag is cleared FIRST (and committed) so the next attempt survives;
+    then the process exits with no cleanup at all — the lease stays held and
+    must expire before another worker may claim the run, exactly as after a
+    real kill. Checked at the heartbeat, i.e. between steps, never mid-write.
+    """
+    with pool.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE runs SET crash_requested_at = NULL
+                WHERE id = %s AND lease_owner = %s AND crash_requested_at IS NOT NULL
+                """,
+                (run_id, WORKER_ID),
+            )
+            hit = cur.rowcount
+    if hit == 1:
+        print(f"[{WORKER_ID}] crash requested for {str(run_id)[:8]}: exiting now", flush=True)
+        os._exit(137)  # the exit code `docker kill` leaves
+
+
 # ── 3b. heartbeat ────────────────────────────────────────────────────────
 def extend_lease(run_id: UUID) -> bool:
     with pool.connection() as conn:
@@ -117,6 +141,7 @@ def run_once() -> bool:
     print(f"[{WORKER_ID}] claimed {run_id} (attempt {run['attempt_count']})", flush=True)
 
     def beat() -> bool:  # F — handed to the loop, called at the top of every turn
+        crash_if_requested(run_id)  # demo "kill the worker" button; usually a no-op
         return extend_lease(run_id)
 
     # Day 17: one trace per run ATTEMPT (a reclaimed run starts a new trace;

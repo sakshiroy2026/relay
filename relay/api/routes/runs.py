@@ -83,6 +83,27 @@ def create_run(
     return CreateRunResponse(run_id=created["run_id"], status=created["status"])
 
 
+@router.post("/runs/{run_id}/crash", status_code=202)
+def crash_run(run_id: UUID, principal: Caller) -> dict:
+    """Demo: kill the worker that owns this run, live, so a visitor can watch
+    another worker resume it from the ledger.
+
+    The flag is read at the worker's next heartbeat; the worker clears it and
+    exits like `docker kill` (no cleanup). Demo-mode tenants only: their runs
+    use the free scripted model, so a crash can never waste a paid call.
+    """
+    if principal.run_mode != "demo":
+        raise HTTPException(
+            status_code=403, detail="crash-the-worker is a demo feature; this tenant is live-mode"
+        )
+    outcome = repo.request_crash(principal.tenant_id, run_id)
+    if outcome is None:
+        raise HTTPException(status_code=404, detail="run not found")
+    if outcome == "not_running":
+        raise HTTPException(status_code=409, detail="run is not running; nothing to kill")
+    return {"status": "crash_requested", "note": "the owning worker dies at its next heartbeat"}
+
+
 @router.get("/runs/{run_id}")
 def get_run(run_id: UUID, principal: Caller) -> dict:
     row = repo.get_run(principal.tenant_id, run_id)

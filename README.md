@@ -32,7 +32,7 @@ Instead of an agent loop living in a process that dies when the process dies, ev
 | Client `Idempotency-Key` on `POST /v1/runs` | ✅ working, 7 tests incl. 8 racing retries → 1 run (evidence below) |
 | API key check, per-run budget cap | ✅ working (evidence below) |
 | Full API keys (prefix + bcrypt, 60 s verification cache), tenant scoping in a repository layer, per-tenant rate limit + concurrency cap | ✅ tested live + 7 tests (evidence below) |
-| Live demo page (`GET /`, pushed via SSE since Day 11, polling as fallback) | ✅ working, kill-and-resume shown live (screenshot above) |
+| Live demo page (`GET /`, pushed via SSE since Day 11, polling as fallback) | ✅ working, kill-and-resume shown live (screenshot above); redesigned 29 Oct with a public **"Kill the worker" button** (demo-mode tenants only: `POST /v1/runs/{id}/crash` arms a flag the owning worker reads at its next heartbeat, then it exits like `docker kill` — lease expiry and ledger replay do the rest; 7 tests) |
 | SSRF guard on `fetch_page` (https only, resolved IPs must be public, redirects re-checked, max 3) | ✅ unit-tested (24 cases); applied with live DNS by the real fetcher |
 | Real tools behind `TOOLS_PROVIDER=real`: Tavily search + a pinned-IP page fetcher (closes DNS rebinding; 2 MB / 10 s / identity-encoding caps) | ✅ built, 32 tests with stub DNS/HTTP and a local TLS server; first real call pending a key (details: [`learn/REAL_TOOLS.md`](learn/REAL_TOOLS.md)) |
 | Retries with jittered backoff + per-tool circuit breaker (shared state in Postgres) | ✅ unit-tested (21 cases) + fault-injection runs (results below) |
@@ -46,7 +46,7 @@ Instead of an agent loop living in a process that dies when the process dies, ev
 | Real model provider (Claude Haiku 5.5 via the official SDK; raw reply blocks replayed verbatim so thinking signatures stay valid across crashes; per-tenant `demo`/`live` mode) | ✅ built and tested through the SDK with a mock transport ($0); first paid run pending the key (details: [`learn/P1_REAL_MODEL.md`](learn/P1_REAL_MODEL.md)) |
 | Eval harness: field scoring vs a hand-labelled golden set, Sonnet 5.5 judge for `industry`, accuracy + precision (flagging = abstaining), CI gate on committed live results | ✅ built, 16 tests, demo eval run; real numbers need the Day 18 labels (details: [`learn/P6_EVAL.md`](learn/P6_EVAL.md)) |
 | CI (GitHub Actions: ruff, mypy, all tests on Postgres 16, eval gate; no secrets, no paid calls) | ✅ added |
-| Public deployment (Oracle Cloud Always Free VM: Caddy HTTPS + API + 3 workers, Neon; public visitors get a free demo-tenant key, never a paid one) | 🔨 config + guide ready ([`learn/DEPLOY.md`](learn/DEPLOY.md)); not yet built or launched |
+| Public deployment | ✅ **live at [relay-sakshi.onrender.com](https://relay-sakshi.onrender.com)** (Render free plan: one container with API + 2 workers, Neon; visitors get a free demo-tenant key, never a paid one; first visit after idle takes ~1 min to wake — [`learn/DEPLOY_RENDER.md`](learn/DEPLOY_RENDER.md)). The Oracle VM path ([`learn/DEPLOY.md`](learn/DEPLOY.md)) stays for a future always-on server |
 
 ---
 
