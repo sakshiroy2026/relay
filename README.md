@@ -31,6 +31,8 @@ Instead of an agent loop living in a process that dies when the process dies, ev
 | Retries with jittered backoff + per-tool circuit breaker (shared state in Postgres) | ✅ unit-tested (21 cases) + fault-injection runs (results below) |
 | Chaos harness and measured results | ✅ 200 runs (results below) |
 | Idempotency / fencing / throughput test suites (blueprint §13 A2–A4) | ✅ measured (results below) + 15 new tests |
+| Schema repair ladder (free JSON extraction → one model re-ask) | ✅ measured: 75/75 repairable broken finals saved (results below) |
+| Dead-letter queue (reaper for exhausted runs, `requeued` ledger marker, operator CLI) | ✅ measured: requeued runs resume from their ledger, 0 restarts (results below) |
 | Real model provider | 🔨 next (everything so far runs on a scripted fake model) |
 | Public deployment | ⬜ planned |
 
@@ -83,6 +85,20 @@ Instead of an agent loop living in a process that dies when the process dies, ev
 | Across all 2,430 sweep runs | 0 claimed twice, 0 ledger problems, all succeeded |
 
 **Conditions:** local PostgreSQL 16 in a cloud development container (not Neon), 4 CPUs, workers as plain processes (no Docker). `scripts/check_run.py` now also validates ledger *shape* (starts with `run_started`, every tool row answers the latest model call, nothing after the verdict). Raw numbers: [`chaos/idempotency_results.json`](chaos/idempotency_results.json), [`chaos/fencing_results.json`](chaos/fencing_results.json), [`chaos/throughput_results.json`](chaos/throughput_results.json); method: [`learn/DAY16.md`](learn/DAY16.md).
+
+`python -m chaos.repair_dlq_test --n 25 --exhausted-n 5` (Day 9): the repair ladder and the dead-letter queue, measured.
+
+| Metric | Result |
+|---|---|
+| Broken final answers a strict parser would have failed | 100 (25 each: code-fenced, prose-wrapped, invalid value, hopeless) |
+| Saved by the ladder | **75 / 75 of the repairable ones** — fenced + prose fixed free by JSON extraction, invalid values by exactly one re-asked model call each |
+| Repairs performed on clean runs | **0** of 25 (the ladder never fires for nothing) |
+| Hopeless answers | 25/25 failed honestly after exactly one re-ask — the ladder never loops |
+| Model 90% down → `model_unavailable` failures requeued via the DLQ | 24/24 requeued, then **25/25 succeeded**; every one **resumed from its ledger** (0 restarts), keeping the model calls paid before the outage |
+| Runs whose worker was `kill -9`'d on all 5 attempts | **5/5 swept to `dead` by the reaper**, requeued with a raised attempt ceiling, then succeeded |
+| Ledger problems across all 155 runs | **0** |
+
+**Conditions:** fake model/tools with injected breakage (`FAKE_BROKEN_FINAL`, `FAKE_MODEL_FAILURE_RATE`), local PostgreSQL 16 in a cloud container (not Neon), 3 process workers. Raw numbers: [`chaos/repair_dlq_results.json`](chaos/repair_dlq_results.json); method: [`learn/DAY9.md`](learn/DAY9.md).
 
 No accuracy numbers are published yet. They need a real model and a hand-labelled dataset.
 
@@ -223,4 +239,4 @@ Currently implements durable execution, lease-based claiming with fencing, trans
 
 Next, in order: the switch from the fake model to a real provider (with real search and page fetch); public deployment; then a hand-labelled golden dataset with LLM-as-judge evaluation gated in CI.
 
-Later: a schema-repair ladder with model escalation, and OpenTelemetry GenAI tracing. Per-tool circuit breakers and retry-with-backoff landed with Day 8, and the idempotency / fencing / throughput test suites with Day 16 (see Measured results).
+Later: OpenTelemetry GenAI tracing and Prometheus metrics. Per-tool circuit breakers and retry-with-backoff landed with Day 8, the idempotency / fencing / throughput test suites with Day 16, and the schema repair ladder + dead-letter queue with Day 9 (see Measured results). The ladder's last rung — escalating to a *stronger* model — waits for the real-model switch.

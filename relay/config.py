@@ -16,11 +16,14 @@ class Settings(BaseSettings):
     fake_delay_seconds: float = 0.0  # Day 6: slow the fake model down so a run can be killed
     # ── Retries + circuit breaker (Day 8) ───────────────────────
     breaker_threshold: int = 5  # consecutive failures before a tool's breaker opens
+    # ── Repair ladder (Day 9) ───────────────────────────────────
+    repair_attempts: int = 1  # rung-2 re-asks allowed per run (0 = ladder is rungs 0-1 only)
     breaker_open_seconds: float = 30.0  # how long an open breaker waits before one probe
     # Fault injection for proofs only; all default off. Fake external tools only.
     fake_tool_failure_rate: float = 0.0  # chance per call of an injected 503
     fake_tool_down: str = ""  # name of one fake tool that always fails (an outage)
     fake_model_failure_rate: float = 0.0  # chance per model call of an injected 503
+    fake_broken_final: str = ""  # Day 9 proofs: break the fake's final answer (see fake_script)
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 

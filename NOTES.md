@@ -168,3 +168,19 @@ A4: claim query 0.111 ms with 100k finished runs (8.4 ms without the partial
 index); 16 workers at 0.2 s model latency = 15.6x speedup (98% efficiency).
 check_run.py now validates ledger shape too. Numbers: chaos/*_results.json
 (local Postgres in a cloud container, not Neon).
+
+## Day 9 — Schema repair ladder + dead-letter queue
+
+Built by Claude Code; see learn/DAY9.md. Explain-back owed.
+Ladder: strict parse -> free JSON extraction (brace-counting, handles fences AND
+prose) -> ONE re-ask where the model sees its own validation errors as a real,
+replayable turn (new step kind repair_requested, migration 004). 75/75 repairable
+broken finals saved; 0 repairs on clean runs; hopeless answers fail after exactly
+one re-ask. Rung 3 (stronger model) waits for the real-model switch.
+DLQ: idle workers reap lease-expired runs with attempts spent -> status 'dead'
+(unused since Day 1, now real); scripts/dlq.py lists by reason and requeues.
+A requeue appends a 'requeued' ledger marker FIRST (clears the verdict in replay),
+then flips to pending with max_attempts = attempts + 5 — so requeued runs RESUME:
+24/24 model-outage failures requeued and finished without re-paying pre-outage
+calls; 5/5 kill-9-until-exhausted runs reaped, requeued, succeeded.
+Numbers: chaos/repair_dlq_results.json (local Postgres, not Neon). 20 new tests (92).

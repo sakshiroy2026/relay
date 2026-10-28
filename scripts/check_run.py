@@ -6,8 +6,9 @@ Checks: step indexes are 0..n-1 with no gaps, and no model reply was paid for
 twice (no two model_call rows with the same content + tool calls). Day 16 adds
 the shape checks a stale worker could break if fencing failed: the ledger starts
 with run_started, every tool_call / tool_result answers the latest model_call,
-no tool call is confirmed twice, and nothing follows a verdict. Prints a summary
-and exits 1 if anything is wrong. The chaos harnesses import check_run().
+no tool call is confirmed twice, and nothing follows a verdict — except a
+`requeued` marker (Day 9), which clears the verdict and reopens the run. Prints
+a summary and exits 1 if anything is wrong. The chaos harnesses import check_run().
 """
 
 import json
@@ -50,7 +51,10 @@ def find_problems(steps: Sequence[Mapping[str, Any]]) -> list[str]:
     for s in steps:
         i, kind, p = s["step_index"], s["kind"], s["payload"]
         if verdict_at is not None:
-            problems.append(f"{kind} at step {i} comes after the verdict at step {verdict_at}")
+            if kind == "requeued":  # Day 9: the verdict was cleared on purpose
+                verdict_at = None
+            else:
+                problems.append(f"{kind} at step {i} comes after the verdict at step {verdict_at}")
             continue
 
         if kind == "model_call":

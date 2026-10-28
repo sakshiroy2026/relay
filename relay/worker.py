@@ -12,6 +12,7 @@ from psycopg.types.json import Jsonb
 
 from relay.agent.loop import run_agent
 from relay.config import settings
+from relay.core.dlq import reap_exhausted
 from relay.core.ledger import LeaseLost
 from relay.db import pool
 
@@ -148,6 +149,10 @@ def main() -> None:
                 continue
 
             if not did_work:
+                # Day 9: an idle moment is when exhausted runs are swept to the
+                # DLQ — one indexed UPDATE that usually matches nothing.
+                for dead_id in reap_exhausted(WORKER_ID):
+                    print(f"[{WORKER_ID}] dead-lettered {dead_id}: attempts exhausted", flush=True)
                 time.sleep(POLL_INTERVAL_SECONDS)
     except KeyboardInterrupt:
         print(f"[{WORKER_ID}] stopping", flush=True)
