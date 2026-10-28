@@ -15,6 +15,7 @@ FAILS WHEN  Model mistakes (unknown tool, bad args, 404) -> ok=False result, nev
 """
 
 import json
+import random
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -27,8 +28,12 @@ from pydantic import BaseModel, Field, HttpUrl, ValidationError
 from relay.agent.schemas import CompanyRecord, PageText, SearchResult
 from relay.agent.ssrf import UnsafeURL, check_url
 from relay.config import settings
+from relay.core import breaker
 from relay.core.idempotency import run_once
+from relay.core.retry import RetryableError, call_with_retries
 from relay.db import pool
+
+TOOL_RETRY_ATTEMPTS = 3  # tries per tool call; sleeps at most ~3 s in total (see retry.py)
 
 
 class ToolError(Exception):
@@ -62,6 +67,15 @@ class FlagForReviewInput(BaseModel):
     field: str = Field(min_length=1, max_length=50)
     question: str = Field(min_length=1, max_length=500)
     options: list[str] = Field(default_factory=list, max_length=10)
+
+
+# ── Fault injection (Day 8 proofs only; both knobs default off) ─────────
+def _maybe_fail(tool_name: str) -> None:
+    """Make a fake external tool flaky or down, like the real internet is."""
+    if settings.fake_tool_down == tool_name:
+        raise RetryableError(f"{tool_name}: injected outage (503 service unavailable)")
+    if settings.fake_tool_failure_rate > 0 and random.random() < settings.fake_tool_failure_rate:
+        raise RetryableError(f"{tool_name}: injected transient failure (503)")
 
 
 # ── The pretend internet (tools_provider = "fake") ──────────────────────
@@ -102,11 +116,13 @@ _FAKE_PAGES: dict[str, PageText] = {
 
 
 def _fake_web_search(args: WebSearchInput, _ctx: ToolContext | None) -> str:
+    _maybe_fail("web_search")
     results = _FAKE_SEARCH.get(args.query.strip().lower(), [])
     return json.dumps([r.model_dump(mode="json") for r in results])
 
 
 def _fake_fetch_page(args: FetchPageInput, _ctx: ToolContext | None) -> str:
+    _maybe_fail("fetch_page")
     try:
         # fake mode: .example hosts don't resolve, so only the checks that need no DNS;
         # the real fetcher calls check_url with DNS, and next_hop on every redirect
@@ -219,6 +235,8 @@ class Tool:
 class ToolResult:
     ok: bool
     content: str  # exactly what the model will read
+    attempts: int = 1  # how many tries this call took (Day 8)
+    breaker_open: bool = False  # True = never ran: the tool's circuit was open
 
 
 _FAKE_TOOLS = (
@@ -292,7 +310,37 @@ def dispatch_tool(name: str, args: dict[str, Any], ctx: ToolContext | None = Non
     except ValidationError as exc:
         return ToolResult(ok=False, content=f"invalid arguments for {name}: {exc}")
 
+    # ── Day 8: circuit gate, then run with retries ────────────────────────
+    # The breaker is checked once per dispatch, not per retry: if the tool is
+    # known-down we don't even make the first attempt. The model is told and
+    # asked to adapt instead of the run crashing (blueprint §9).
+    if not breaker.allow(name):
+        return ToolResult(
+            ok=False,
+            content=(
+                f"{name} is temporarily unavailable (circuit open); "
+                "continue with the evidence you already have, or use flag_for_review"
+            ),
+            breaker_open=True,
+        )
+
     try:
-        return ToolResult(ok=True, content=tool.run(validated, ctx))
+        content, attempts = call_with_retries(
+            lambda: tool.run(validated, ctx),
+            attempts=TOOL_RETRY_ATTEMPTS,
+            on_failure=lambda _exc: breaker.record_failure(name),
+        )
     except ToolError as exc:
+        # A model mistake (404, bad URL): the tool itself is healthy, so the
+        # breaker is not touched and nothing is retried.
         return ToolResult(ok=False, content=str(exc))
+    except RetryableError as exc:
+        # Every attempt failed; each one was already counted by the breaker.
+        return ToolResult(
+            ok=False,
+            content=f"{name} failed after {TOOL_RETRY_ATTEMPTS} attempts: {exc}",
+            attempts=TOOL_RETRY_ATTEMPTS,
+        )
+
+    breaker.record_success(name)
+    return ToolResult(ok=True, content=content, attempts=attempts)

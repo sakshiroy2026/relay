@@ -28,6 +28,7 @@ Instead of an agent loop living in a process that dies when the process dies, ev
 | API key check, per-run budget cap | ✅ working (evidence below) |
 | Live demo page (`GET /`, polls the ledger once a second) | ✅ working, kill-and-resume shown live (screenshot above) |
 | SSRF guard on `fetch_page` (https only, resolved IPs must be public, redirects re-checked, max 3) | ✅ unit-tested (24 cases); DNS checks go live with the real fetcher |
+| Retries with jittered backoff + per-tool circuit breaker (shared state in Postgres) | ✅ unit-tested (21 cases) + fault-injection runs (results below) |
 | Chaos harness and measured results | ✅ 200 runs (results below) |
 | Real model provider | 🔨 next (everything so far runs on a scripted fake model) |
 | Public deployment | ⬜ planned |
@@ -52,6 +53,21 @@ Instead of an agent loop living in a process that dies when the process dies, ev
 | Time from kill to the next worker's first step | median 15.8 s, p90 16.9 s |
 
 **Conditions:** a scripted fake model and fake search/fetch tools, with real PostgreSQL writes (Neon). 3 worker containers, a 15 s lease, and a 1.5 s fake model delay. The harness measures crash recovery, not answer quality, so it runs on the fake client. Time to resume tracks the lease setting; with the default 90 s lease it would be up to 90 s. Raw per-run data: [`chaos/iterations.jsonl`](chaos/iterations.jsonl); summary: [`chaos/results.json`](chaos/results.json); method and caveats: [`learn/CHAOS.md`](learn/CHAOS.md).
+
+`python -m chaos.fault_test --scenario flaky --n 50` and `--scenario outage` (Day 8): the fake external tools are made to fail like the real internet does, and the run is measured instead of trusted.
+
+| Metric | Result |
+|---|---|
+| Runs with 30% tool failures + 10% model failures injected | **50 / 50 succeeded** |
+| Tool calls that failed, were retried, and recovered | 41 of 200 |
+| Tool calls that exhausted all 3 attempts (the model is told and adapts) | 7 |
+| Model calls retried | 12 |
+| Ledger anomalies (index gaps, repeated model calls) | **0** |
+| Outage test: `fetch_page` fully down — breaker opened after | 5 consecutive failures (the threshold) |
+| Calls skipped while open, instead of hammering a dead tool | 13 |
+| Breaker recovery after the outage ended | closed itself via one probe |
+
+**Conditions:** fake model and tools with injected 503s, 3 workers, retries capped at 3 attempts with full-jitter backoff. These runs were executed against a local PostgreSQL 16 (in a development container, not Neon); the chaos-harness numbers above were measured on Neon. A worker killed with `kill -9` while retries were active (run `28ca2373`) was resumed by a second worker with no gaps and no repeated model calls. Raw numbers: [`chaos/fault_results.json`](chaos/fault_results.json); method: [`learn/DAY8.md`](learn/DAY8.md).
 
 No accuracy numbers are published yet. They need a real model and a hand-labelled dataset.
 
@@ -192,4 +208,4 @@ Currently implements durable execution, lease-based claiming with fencing, trans
 
 Next, in order: the switch from the fake model to a real provider (with real search and page fetch); public deployment; then a hand-labelled golden dataset with LLM-as-judge evaluation gated in CI.
 
-Later: per-tool circuit breakers, a schema-repair ladder with model escalation, and OpenTelemetry GenAI tracing.
+Later: a schema-repair ladder with model escalation, and OpenTelemetry GenAI tracing. Per-tool circuit breakers and retry-with-backoff landed with Day 8 (see Measured results).

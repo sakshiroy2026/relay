@@ -1,0 +1,83 @@
+{
+  "flaky": {
+    "conditions": {
+      "runs": 50,
+      "workers": 3,
+      "fake_tool_failure_rate": 0.3,
+      "fake_model_failure_rate": 0.1,
+      "retry_attempts_per_call": 3
+    },
+    "statuses": {
+      "succeeded": 50
+    },
+    "tool_results": 200,
+    "tool_attempts_histogram": {
+      "1": 152,
+      "2": 31,
+      "3": 17
+    },
+    "tool_calls_recovered_by_retry": 41,
+    "tool_calls_exhausted_retries": 7,
+    "tool_calls_short_circuited_by_breaker": 0,
+    "model_calls": 200,
+    "model_calls_retried": 12,
+    "model_unavailable_errors": 0,
+    "ledger_problems": {},
+    "breaker_states_at_end": {
+      "fetch_page": "closed",
+      "web_search": "closed"
+    },
+    "elapsed_s": 17.2,
+    "environment_note": "local Postgres 16 in a cloud container (not Neon); Docker-less workers as plain processes"
+  },
+  "outage": {
+    "conditions": {
+      "down_tool": "fetch_page",
+      "breaker_threshold": 5,
+      "breaker_open_seconds_used": 8.0,
+      "workers": 3,
+      "note": "the scripted fake model carries on whatever the tools return, so run SUCCESS here only proves runs don't crash; the breaker numbers are the point"
+    },
+    "phase1_tool_down": {
+      "statuses": {
+        "succeeded": 8
+      },
+      "tool_results": 32,
+      "tool_attempts_histogram": {
+        "1": 29,
+        "3": 3
+      },
+      "tool_calls_recovered_by_retry": 0,
+      "tool_calls_exhausted_retries": 3,
+      "tool_calls_short_circuited_by_breaker": 13,
+      "model_calls": 32,
+      "model_calls_retried": 0,
+      "model_unavailable_errors": 0,
+      "ledger_problems": {},
+      "breaker": {
+        "fetch_page": "open"
+      }
+    },
+    "phase2_recovered": {
+      "statuses": {
+        "succeeded": 3
+      },
+      "tool_results": 12,
+      "tool_attempts_histogram": {
+        "1": 12
+      },
+      "tool_calls_recovered_by_retry": 0,
+      "tool_calls_exhausted_retries": 0,
+      "tool_calls_short_circuited_by_breaker": 0,
+      "model_calls": 12,
+      "model_calls_retried": 0,
+      "model_unavailable_errors": 0,
+      "ledger_problems": {},
+      "breaker": {
+        "fetch_page": "closed"
+      }
+    },
+    "elapsed_s": 12.1,
+    "environment_note": "local Postgres 16 in a cloud container (not Neon); Docker-less workers as plain processes"
+  }
+}

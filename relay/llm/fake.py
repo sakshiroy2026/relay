@@ -1,8 +1,11 @@
 import json
+import random
 import time
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
+from relay.core.retry import RetryableError
 from relay.llm.client import Response, StopReason, ToolCall
 
 
@@ -23,9 +26,17 @@ def _estimate_tokens(obj: Any) -> int:
 class FakeLLMClient:
     """Scripted, deterministic stand-in for a real model. Costs $0."""
 
-    def __init__(self, script: list[ScriptedReply], delay_seconds: float = 0.0) -> None:
+    def __init__(
+        self,
+        script: list[ScriptedReply],
+        delay_seconds: float = 0.0,
+        failure_rate: float = 0.0,
+        rng: Callable[[], float] = random.random,
+    ) -> None:
         self._script = script
         self._delay_seconds = delay_seconds  # stand-in for real model latency
+        self._failure_rate = failure_rate  # Day 8 proofs: chance of an injected 503
+        self._rng = rng
 
     def call(
         self,
@@ -36,6 +47,10 @@ class FakeLLMClient:
     ) -> Response:
         if self._delay_seconds > 0:
             time.sleep(self._delay_seconds)
+
+        # The injected failure comes AFTER the latency, like a real 503 would.
+        if self._failure_rate > 0 and self._rng() < self._failure_rate:
+            raise RetryableError("fake model: injected 503 (overloaded)")
 
         # Which reply? Decided by the conversation, not by a counter —
         # so a fresh worker after a crash picks the same reply the old one would have.
