@@ -29,6 +29,7 @@ Instead of an agent loop living in a process that dies when the process dies, ev
 | Agent loop inside the workers | ✅ runs end to end: request → worker → ledger → stored record |
 | Transcript replay after a crash | ✅ working, verified with `docker kill` mid-run (evidence below) |
 | Idempotent write tools (per-tool key + unique constraint) | ✅ working, verified with `docker kill` inside `save_company` (evidence below) |
+| Client `Idempotency-Key` on `POST /v1/runs` | ✅ working, 7 tests incl. 8 racing retries → 1 run (evidence below) |
 | API key check, per-run budget cap | ✅ working (evidence below) |
 | Full API keys (prefix + bcrypt, 60 s verification cache), tenant scoping in a repository layer, per-tenant rate limit + concurrency cap | ✅ tested live + 7 tests (evidence below) |
 | Live demo page (`GET /`, pushed via SSE since Day 11, polling as fallback) | ✅ working, kill-and-resume shown live (screenshot above) |
@@ -168,7 +169,7 @@ The workload was chosen because it is multi-step (8–15 tool calls, so there is
 |---|---|
 | **Lease** | A claim on a run expires after 90 seconds unless the worker renews it. A dead worker needs no cleanup: the timestamp simply passes and the same query that claims fresh runs reclaims it. |
 | **Fencing** | `UNIQUE (run_id, step_index)` on the ledger. A stalled worker that wakes after its lease expired and tries to write a step the new owner already wrote gets a unique violation, recognises it was fenced, and aborts. Split-brain protection from a database constraint instead of a distributed lock service. |
-| **Idempotency** | Three overlapping layers: client `Idempotency-Key` (planned), a per-tool-invocation key written *before* execution, and a database uniqueness constraint on the output table (both built). The key is `<run_id>:<tool_call_id>`, so a re-run after a crash reuses it, and the write commits in the same transaction as the key's "done" mark. |
+| **Idempotency** | Three overlapping layers, all built: a client `Idempotency-Key` on `POST /v1/runs` (committed in the same transaction as the run it created), a per-tool-invocation key written *before* execution, and a database uniqueness constraint on the output table. The key is `<run_id>:<tool_call_id>`, so a re-run after a crash reuses it, and the write commits in the same transaction as the key's "done" mark. |
 | **Replay** | A new worker rebuilds the conversation by reading the ledger in order. Not code re-execution — the transcript was written down, so recovery is a `SELECT … ORDER BY` and a loop. |
 
 ### The agent loop
@@ -196,6 +197,8 @@ Manual tests against three worker containers and PostgreSQL on Neon. Run ids are
 **Crash before the write committed** — run `fa4340ca`: worker-2 recorded the key and was killed before its write. Worker-1 re-ran the call and did the write once. Again 1 row, `attempts = 2, executions = 1`. Both runs used temporary delays inside the tool to aim the kill; those delays aren't in the code.
 
 `scripts/idempotency_smoke.py` exercises the same paths without workers: the same key twice is executed once, a second key for the same domain updates the one existing row, and a key left `in_flight` by a dead worker executes exactly once.
+
+**Client Idempotency-Key** — run `4f186a0d`: a `POST /v1/runs` sent twice with the same `Idempotency-Key` returned the same run id both times (the second with `Idempotent-Replayed: true`), the same key with a different domain got `422`, and the database held exactly one run. The key row commits in the same transaction as the run; 8 parallel retries with one key create exactly one run, and a replay is never refused by the concurrency cap (`tests/test_idempotency_key.py`, method: [`learn/IDEMPOTENCY_KEY.md`](learn/IDEMPOTENCY_KEY.md)).
 
 **API key** — every `/v1` route requires `Authorization: Bearer <key>`, compared in constant time. Without a key, with a wrong key, or without the `Bearer` scheme: `401`. With the key: `202`. `/healthz` stays open. If the server has no key configured, `/v1` answers `503` instead of running open.
 

@@ -71,8 +71,8 @@ Safety nets, all three on: (1) a Console spend limit, (2) Relay's per-run
 `budget_usd` cap (the ledger enforces it), (3) state the estimate and wait for
 the go before every paid command.
 
-Still $0 and not yet built: the client `Idempotency-Key` header on `POST /v1/runs`
-(README's architecture table lists it as planned).
+The client `Idempotency-Key` on `POST /v1/runs` is built (migration 007,
+learn/IDEMPOTENCY_KEY.md).
 
 ## Key setup (Sakshi does this; Claude never sees the key)
 

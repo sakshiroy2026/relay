@@ -223,3 +223,13 @@ can't send Authorization) with automatic fallback to the old polling.
 Measured: 65 steps over 5 live runs, median 3.7 ms / p90 6.7 ms insert-commit ->
 parsed event (vs ~500 ms avg at 1 s polling); Playwright browser run clean.
 5 new tests (109 total).
+
+## Client Idempotency-Key (the first idempotency layer)
+
+Built by Claude Code; see learn/IDEMPOTENCY_KEY.md. Explain-back owed.
+Migration 007: idempotency_keys (tenant_id, key) -> run_id + body sha256. The key
+row commits with the run and step 0; the Day 10 per-tenant advisory lock already
+serialises racing retries. Same key + same body -> same run, header
+Idempotent-Replayed: true (checked BEFORE the cap: a replay creates nothing);
+same key + other body -> 422; malformed -> 400. Demo page sends a fresh UUID per
+Start. Live: run 4f186a0d replayed, 1 row. 7 new tests (116 total).

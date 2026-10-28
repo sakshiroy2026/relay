@@ -9,13 +9,19 @@ GOES IN     The Principal's tenant_id, plus the route's parameters.
 COMES OUT   Plain dicts/lists for the routes to return; None for "not found
             in THIS tenant" (another tenant's rows are indistinguishable from
             missing ones, which is the point).
-TOUCHES     runs, steps, companies.
+TOUCHES     runs, steps, companies, idempotency_keys.
 FAILS WHEN  Database errors propagate. create_run raises ConcurrencyLimit
             when the tenant's open runs are at max_concurrent_runs: the count
             and the insert happen under a per-tenant advisory transaction
             lock, so two racing requests cannot both squeeze past the cap.
+            With a client Idempotency-Key, a key already used for the SAME
+            body returns that run (replayed, never blocked by the cap: it
+            creates nothing); for a DIFFERENT body it raises
+            IdempotencyMismatch. The key row commits with the run.
 """
 
+import hashlib
+import json
 from typing import Any
 from uuid import UUID
 
@@ -27,6 +33,15 @@ from relay.db import pool
 AGENT_VERSION = "enrich@v2"
 
 
+class IdempotencyMismatch(Exception):
+    """The Idempotency-Key was already used by this tenant for a different request body."""
+
+
+def request_hash(body: dict[str, Any]) -> str:
+    """Same body -> same hash, whatever the key order the client sent."""
+    return hashlib.sha256(json.dumps(body, sort_keys=True).encode()).hexdigest()
+
+
 class ConcurrencyLimit(Exception):
     """The tenant already has max_concurrent_runs runs pending or running."""
 
@@ -35,17 +50,39 @@ class ConcurrencyLimit(Exception):
         super().__init__(f"{open_runs} open runs, cap {cap}")
 
 
-def create_run(tenant_id: UUID, domain: str, max_concurrent: int) -> dict[str, Any]:
+def create_run(
+    tenant_id: UUID,
+    domain: str,
+    max_concurrent: int,
+    idempotency_key: str | None = None,
+) -> dict[str, Any]:
     payload = {"domain": domain}
+    body_hash = request_hash(payload)
     with pool.connection() as conn:
         with conn.cursor() as cur:
             # One advisory lock per tenant for the length of this transaction:
             # concurrent creates for the SAME tenant queue up for a few ms, so
             # the count below can't be stale when the insert commits. Other
-            # tenants use other lock keys and are not slowed down.
+            # tenants use other lock keys and are not slowed down. It also
+            # serialises two requests racing with the same Idempotency-Key: the
+            # second one waits, then finds the first one's committed key row.
             cur.execute(
                 "SELECT pg_advisory_xact_lock(hashtextextended(%s::text, 42))", (tenant_id,)
             )
+            if idempotency_key is not None:
+                cur.execute(
+                    "SELECT k.request_hash, r.id, r.status::text FROM idempotency_keys k "
+                    "JOIN runs r ON r.id = k.run_id WHERE k.tenant_id = %s AND k.key = %s",
+                    (tenant_id, idempotency_key),
+                )
+                seen = cur.fetchone()
+                if seen is not None:
+                    if seen[0] != body_hash:
+                        raise IdempotencyMismatch(idempotency_key)
+                    # checked BEFORE the cap: a replay creates nothing, so it
+                    # must not be refused for capacity
+                    return {"run_id": seen[1], "status": seen[2], "replayed": True}
+
             cur.execute(
                 "SELECT count(*) FROM runs "
                 "WHERE tenant_id = %s AND status IN ('pending', 'running')",
@@ -69,7 +106,13 @@ def create_run(tenant_id: UUID, domain: str, max_concurrent: int) -> dict[str, A
                 "VALUES (%s, 0, 'run_started', %s, 'api')",
                 (created[0], Jsonb(payload)),
             )
-    return {"run_id": created[0], "status": created[1]}
+            if idempotency_key is not None:  # same commit as the run: never one without the other
+                cur.execute(
+                    "INSERT INTO idempotency_keys (tenant_id, key, request_hash, run_id) "
+                    "VALUES (%s, %s, %s, %s)",
+                    (tenant_id, idempotency_key, body_hash, created[0]),
+                )
+    return {"run_id": created[0], "status": created[1], "replayed": False}
 
 
 def get_run(tenant_id: UUID, run_id: UUID) -> dict[str, Any] | None:

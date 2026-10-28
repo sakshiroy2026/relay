@@ -2,7 +2,7 @@ import json
 from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -31,10 +31,40 @@ class CreateRunResponse(BaseModel):
     status: str
 
 
+# A client key is any 1-255 printable-ASCII characters (a UUID is typical).
+IDEMPOTENCY_KEY_MAX = 255
+
+
 @router.post("/runs", status_code=202, response_model=CreateRunResponse)
-def create_run(body: CreateRunRequest, principal: Caller) -> CreateRunResponse:
+def create_run(
+    body: CreateRunRequest,
+    principal: Caller,
+    response: Response,
+    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
+) -> CreateRunResponse:
+    """Create a run. With an Idempotency-Key, a retried POST returns the same run.
+
+    Same key + same body -> the original run (header `Idempotent-Replayed: true`),
+    even when the tenant is at its concurrency cap. Same key + different body -> 422.
+    """
+    if idempotency_key is not None and not (
+        0 < len(idempotency_key) <= IDEMPOTENCY_KEY_MAX
+        and idempotency_key.isascii()
+        and idempotency_key.isprintable()
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Idempotency-Key must be 1-{IDEMPOTENCY_KEY_MAX} printable ASCII characters",
+        )
     try:
-        created = repo.create_run(principal.tenant_id, body.domain, principal.max_concurrent_runs)
+        created = repo.create_run(
+            principal.tenant_id, body.domain, principal.max_concurrent_runs, idempotency_key
+        )
+    except repo.IdempotencyMismatch as exc:
+        raise HTTPException(
+            status_code=422,
+            detail="this Idempotency-Key was already used with a different request body",
+        ) from exc
     except repo.ConcurrencyLimit as exc:
         raise HTTPException(
             status_code=429,
@@ -44,6 +74,8 @@ def create_run(body: CreateRunRequest, principal: Caller) -> CreateRunResponse:
             ),
             headers={"Retry-After": "5"},
         ) from exc
+    if created["replayed"]:
+        response.headers["Idempotent-Replayed"] = "true"
     return CreateRunResponse(run_id=created["run_id"], status=created["status"])
 
 

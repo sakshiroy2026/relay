@@ -167,7 +167,14 @@ $("startForm").addEventListener("submit", async (ev) => {
   ev.preventDefault(); say("");
   $("startBtn").disabled = true;
   try {
-    const out = await api("/v1/runs", { method: "POST", body: JSON.stringify({ domain: $("domain").value.trim() }) });
+    // one Idempotency-Key per click: if the network drops the reply and the
+    // request is retried, the API hands back the same run instead of a second one
+    const idem = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : null;
+    const out = await api("/v1/runs", {
+      method: "POST",
+      body: JSON.stringify({ domain: $("domain").value.trim() }),
+      headers: idem ? { "Idempotency-Key": idem } : {},
+    });
     reset(out.run_id);
     stream();
   } catch (e) { say(e.message); }
