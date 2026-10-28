@@ -233,3 +233,18 @@ serialises racing retries. Same key + same body -> same run, header
 Idempotent-Replayed: true (checked BEFORE the cap: a replay creates nothing);
 same key + other body -> 422; malformed -> 400. Demo page sends a fresh UUID per
 Start. Live: run 4f186a0d replayed, 1 row. 7 new tests (116 total).
+
+## Real tools (P2): Tavily search + pinned-IP fetcher
+
+Built by Claude Code; see learn/REAL_TOOLS.md. Explain-back owed.
+TOOLS_PROVIDER=real swaps in tavily_search + fetch_page under the SAME names and
+schemas (same model menu, same cache prefix); refuses to boot without
+TAVILY_API_KEY. Stdlib only, no new deps. fetch_page connects to the IP
+check_url APPROVED (never re-resolves = DNS rebinding closed) while TLS still
+verifies the URL's hostname; redirects re-checked (max 3), 2 MB cap, one 10 s
+budget for the whole chain, Accept-Encoding identity (no zip bombs), text pages
+only, text cut to page_text_max_chars=8000. Failures keep the Day 8 split.
+32 tests (148 total), no network: stub DNS/HTTP, a local TLS server, and a
+mutation check (re-resolving before connect fails the pinning test).
+UNVERIFIED until the first real call: Tavily's wire format (docs host blocked
+from the container). The pinned fetcher bypasses HTTP proxies by design.

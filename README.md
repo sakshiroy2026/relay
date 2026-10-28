@@ -33,7 +33,8 @@ Instead of an agent loop living in a process that dies when the process dies, ev
 | API key check, per-run budget cap | ✅ working (evidence below) |
 | Full API keys (prefix + bcrypt, 60 s verification cache), tenant scoping in a repository layer, per-tenant rate limit + concurrency cap | ✅ tested live + 7 tests (evidence below) |
 | Live demo page (`GET /`, pushed via SSE since Day 11, polling as fallback) | ✅ working, kill-and-resume shown live (screenshot above) |
-| SSRF guard on `fetch_page` (https only, resolved IPs must be public, redirects re-checked, max 3) | ✅ unit-tested (24 cases); DNS checks go live with the real fetcher |
+| SSRF guard on `fetch_page` (https only, resolved IPs must be public, redirects re-checked, max 3) | ✅ unit-tested (24 cases); applied with live DNS by the real fetcher |
+| Real tools behind `TOOLS_PROVIDER=real`: Tavily search + a pinned-IP page fetcher (closes DNS rebinding; 2 MB / 10 s / identity-encoding caps) | ✅ built, 32 tests with stub DNS/HTTP and a local TLS server; first real call pending a key (details: [`learn/REAL_TOOLS.md`](learn/REAL_TOOLS.md)) |
 | Retries with jittered backoff + per-tool circuit breaker (shared state in Postgres) | ✅ unit-tested (21 cases) + fault-injection runs (results below) |
 | Chaos harness and measured results | ✅ 200 runs (results below) |
 | Idempotency / fencing / throughput test suites (blueprint §13 A2–A4) | ✅ measured (results below) + 15 new tests |

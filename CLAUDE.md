@@ -58,7 +58,7 @@ as output) ≈ **$0.006 per run** on Haiku 5.5 (≈ $0.12 on Sonnet 5.5).
 | # | Stage | Builds | Paid runs needed | Est. cost |
 |---|---|---|---|---|
 | P1 | Real model switch | `relay/llm/anthropic.py` behind the existing `LLMClient` protocol (official `anthropic` SDK; tool-use ↔ Relay `Response`/`ToolCall`; usage incl. cache tokens; `refusal` stop reason; 429/5xx/connection → `RetryableError`, 400 → `FatalError`; SDK `max_retries=0` because Relay retries itself); real prices in `pricing.py`; lower the default `budget_usd` for Haiku. Unit tests use stubbed responses ($0) | ~10 smoke runs | ~$0.10 |
-| P2 | Real tools | Tavily `web_search` (free tier, 1,000/month) + real `fetch_page` through `relay/agent/ssrf.py` with DNS, 2 MB / 10 s caps, text trimmed to a token cap — behind `TOOLS_PROVIDER=real`. Can be BUILT for $0 before any key exists; stubbed-HTTP tests | (shared with P1/P4) | $0 |
+| P2 | Real tools — **BUILT** (learn/REAL_TOOLS.md, 32 tests). Left to do: one real Tavily search to verify its request/response format (free tier, $0; the docs host was blocked from the container, so the format is from memory), then one real fetch. Needs `TAVILY_API_KEY` (free signup) and `TOOLS_PROVIDER=real`. The pinned fetcher bypasses HTTP proxies by design, so in a proxied cloud container real fetches may be blocked: verify on a normal host | 1 search + 1 fetch | $0 |
 | P3 | Cost hygiene | prompt caching on the frozen system prompt + tool list (verify `cache_read_input_tokens` > 0; Haiku has a minimum cacheable prefix — measure, don't assume); effort setting measured (`low` vs `medium`) | ~10 runs | ~$0.10 |
 | P4 | Chaos harness on the real model | re-run `chaos/fault_test.py`-style kill tests, small N (≈30), budget caps on | ~30 runs | ~$0.30 |
 | P5 | Repair ladder rung 3 + fallback model | escalate a still-broken final from Haiku to Sonnet 5.5 once; model fallback when the primary is unavailable | ~5 runs | ~$0.20 |
@@ -76,9 +76,11 @@ learn/IDEMPOTENCY_KEY.md).
 
 ## Key setup (Sakshi does this; Claude never sees the key)
 
-- Windows: one line `ANTHROPIC_API_KEY=...` in `C:\dev\relay\.env`.
+- Windows: one line `ANTHROPIC_API_KEY=...` in `C:\dev\relay\.env` (and later
+  `TAVILY_API_KEY=...` + `TOOLS_PROVIDER=real` for real search).
 - Cloud sessions: the environment's settings (cloud environment menu in the session
   title bar → Edit) → Network secrets if offered, otherwise an environment variable
-  named `ANTHROPIC_API_KEY`. A new session picks it up. Check it exists with
+  named `ANTHROPIC_API_KEY` (and `TAVILY_API_KEY`; `api.tavily.com` may also
+  need allowing in the environment's network settings). A new session picks it up. Check it exists with
   `python -c "import os; print(bool(os.environ.get('ANTHROPIC_API_KEY')))"` — never
   print the value.

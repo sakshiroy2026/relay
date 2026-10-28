@@ -12,7 +12,12 @@ class Settings(BaseSettings):
     llm_provider: Literal["fake", "anthropic"] = "fake"
     model_planner: str = "fake-planner"
     model_cheap: str = "fake-cheap"
-    tools_provider: Literal["fake"] = "fake"
+    tools_provider: Literal["fake", "real"] = "fake"
+    # ── Real tools (P2): Tavily search + pinned-IP page fetcher ─
+    tavily_api_key: str | None = None  # required when tools_provider = "real"; never logged
+    page_text_max_chars: int = (
+        8000  # ~2k tokens of page text per fetch: the model's main input cost
+    )
     fake_delay_seconds: float = 0.0  # Day 6: slow the fake model down so a run can be killed
     # ── Retries + circuit breaker (Day 8) ───────────────────────
     breaker_threshold: int = 5  # consecutive failures before a tool's breaker opens
