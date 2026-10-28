@@ -61,7 +61,7 @@ as output) ≈ **$0.006 per run** on Haiku 5.5 (≈ $0.12 on Sonnet 5.5).
 | P2 | Real tools — **BUILT** (learn/REAL_TOOLS.md, 32 tests). Left to do: one real Tavily search to verify its request/response format (free tier, $0; the docs host was blocked from the container, so the format is from memory), then one real fetch. Needs `TAVILY_API_KEY` (free signup) and `TOOLS_PROVIDER=real`. The pinned fetcher bypasses HTTP proxies by design, so in a proxied cloud container real fetches may be blocked: verify on a normal host | 1 search + 1 fetch | $0 |
 | P3 | Cost hygiene | prompt caching on the frozen system prompt + tool list (verify `cache_read_input_tokens` > 0; Haiku has a minimum cacheable prefix — measure, don't assume); effort setting measured (`low` vs `medium`) | ~10 runs | ~$0.10 |
 | P4 | Chaos harness on the real model | re-run `chaos/fault_test.py`-style kill tests, small N (≈30), budget caps on | ~30 runs | ~$0.30 |
-| P5 | Repair ladder rung 3 + fallback model | escalate a still-broken final from Haiku to Sonnet 5.5 once; model fallback when the primary is unavailable | ~5 runs | ~$0.20 |
+| P5 | Rung 3 + fallback — **BUILT** (learn/P5_ESCALATION.md, budget-guarded). Left: one paid run that forces rung 3 (e.g. `FAKE_BROKEN_FINAL` has no effect on the real model, so pick a domain it can't settle and watch for `escalated:` tags) | ~5 runs | ~$0.20 |
 | — | Deployment (EC2 + domain, Caddy, Grafana/OTLP) | Sakshi buys the infra first | — | infra cost |
 | — | Day 18 hand-labelling | Sakshi's own work | — | $0 |
 | P6 | Day 19/20 eval | golden set runs on Haiku + LLM-as-judge (Sonnet 5.5), gated in CI | ~50 runs + judge | ~$1–2 |

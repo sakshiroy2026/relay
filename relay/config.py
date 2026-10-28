@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = 60.0  # keep LEASE_SECONDS well above this in deployment
     llm_prompt_cache: bool = True  # P3: cache the stable prefix (system + tools + history)
     live_run_budget_usd: float = 0.05  # per live run; a Haiku run is ~$0.006, so ~8x headroom
+    # ── P5: a stronger model as a last resort (real provider only; "" = off) ─
+    escalation_model: str = "claude-sonnet-5-5"  # repair rung 3: one try after Haiku's re-ask fails
+    fallback_model: str = "claude-sonnet-5-5"  # when the primary is still down after its retries
     # ── Retries + circuit breaker (Day 8) ───────────────────────
     breaker_threshold: int = 5  # consecutive failures before a tool's breaker opens
     # ── Repair ladder (Day 9) ───────────────────────────────────

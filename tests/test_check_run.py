@@ -93,3 +93,12 @@ def test_next_kind_follows_the_loop() -> None:
     assert next_kind(rows[:9]) == "model_call"  # all tools of the turn confirmed
     assert next_kind(rows[:13]) == "final"  # end_turn reply, not judged yet
     assert next_kind(rows) == "nothing (already decided)"
+
+
+def test_the_same_answer_after_a_reask_is_not_a_repeat() -> None:
+    """A re-ask (Day 9) or escalation (P5) may legitimately get the same reply back."""
+    reask = row(13, "repair_requested", {"message": "fix it", "errors": "x"})
+    rows = [*full_run()[:13], reask, model_call(14, 3)]
+    assert find_problems(rows) == []
+    # ...but the same reply twice with no re-ask between them is still caught
+    assert any("repeats" in p for p in find_problems([*full_run()[:13], model_call(13, 3)]))

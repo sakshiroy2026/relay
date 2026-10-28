@@ -5,7 +5,8 @@ WHAT IT IS  The price list and the arithmetic. The ledger stores the result in
             rows, so this function is what turns tokens into the budget's truth.
 GOES IN     A Response: its model and its token counts (uncached input, cache
             reads, cache writes, output — thinking is billed as output).
-COMES OUT   The cost in USD, rounded to 6 decimals.
+COMES OUT   The cost in USD, rounded to 6 decimals. estimate(): a pessimistic
+            price for a call not made yet (P5: can this run afford Sonnet?).
 TOUCHES     Nothing.
 FAILS WHEN  The model has no price -> UnknownModelPrice. The factory checks the
             configured model at boot (assert_priced), so this can't first
@@ -72,3 +73,21 @@ def price(response: Response) -> float:
         + response.output_tokens * out_rate
     ) / 1_000_000
     return round(cost, 6)
+
+
+def estimate(model: str, prompt_tokens: int, output_tokens: int = 2000) -> float:
+    """A pessimistic cost for a call not made yet: every prompt token uncached.
+
+    Used to decide whether a run can afford an escalation or a fallback to a
+    pricier model BEFORE making it (P5) — the budget check alone runs only
+    before each turn and can be overshot by one call.
+    """
+    assert_priced(model)
+    fake = Response(
+        model=model,
+        content="",
+        stop_reason="end_turn",
+        input_tokens=prompt_tokens,
+        output_tokens=output_tokens,
+    )
+    return price(fake)

@@ -55,6 +55,8 @@ class ReplayState:
     turns_used: int  # model_call rows already in the ledger
     spent_usd: float = 0.0  # sum of cost_usd over those model_call rows (the budget's truth)
     repairs_used: int = 0  # repair_requested rows: re-asks already spent (Day 9)
+    escalated_to: str | None = None  # P5: a repair_requested row moved the run to this model
+    last_prompt_tokens: int = 0  # P5: the latest model_call's prompt size, for cost estimates
     pending_tool_calls: list[ToolCall] = field(default_factory=list)  # asked, never confirmed
     final: dict[str, Any] | None = None  # payload of a `final` row: the run is already done
     failed: bool = False  # an `error` / `budget_exceeded` row with no `requeued` row after it
@@ -70,6 +72,8 @@ def rebuild_messages(rows: Sequence[Mapping[str, Any]]) -> ReplayState:
     turns_used = 0
     spent = 0.0
     repairs = 0
+    escalated_to: str | None = None
+    last_prompt = 0
     failed = False  # an error / budget_exceeded row with no requeued row after it
     last_reply: Mapping[str, Any] | None = None  # payload of the latest model_call
     confirmed: set[str] = set()  # tool_call_ids with a tool_result since that model_call
@@ -83,6 +87,11 @@ def rebuild_messages(rows: Sequence[Mapping[str, Any]]) -> ReplayState:
             messages.append(assistant_message(p["content"], p["tool_calls"], p.get("raw_content")))
             turns_used += 1
             spent += float(p["cost_usd"])
+            last_prompt = (
+                int(p.get("input_tokens", 0))
+                + int(p.get("cache_read_tokens", 0))
+                + int(p.get("cache_write_tokens", 0))
+            )
             last_reply = p
             confirmed = set()
         elif kind == "tool_call":
@@ -100,7 +109,14 @@ def rebuild_messages(rows: Sequence[Mapping[str, Any]]) -> ReplayState:
         elif kind == "final":
             result = {k: v for k, v in p.items() if k != "repaired_by"}  # the clean record
             return ReplayState(
-                messages, row["step_index"] + 1, turns_used, spent, repairs, final=result
+                messages,
+                row["step_index"] + 1,
+                turns_used,
+                spent,
+                repairs,
+                escalated_to=escalated_to,
+                last_prompt_tokens=last_prompt,
+                final=result,
             )
         elif kind in ("error", "budget_exceeded"):
             failed = True  # final unless a requeued row follows
@@ -110,6 +126,7 @@ def rebuild_messages(rows: Sequence[Mapping[str, Any]]) -> ReplayState:
         elif kind == "repair_requested":
             messages.append({"role": "user", "content": p["message"]})
             repairs += 1
+            escalated_to = p.get("escalate_to") or escalated_to
             last_reply = None  # the broken answer was judged; the re-ask is next
         else:
             raise RuntimeError(f"replay does not know step kind {kind!r}")
@@ -117,7 +134,16 @@ def rebuild_messages(rows: Sequence[Mapping[str, Any]]) -> ReplayState:
     next_index = rows[-1]["step_index"] + 1
 
     if failed:
-        return ReplayState(messages, next_index, turns_used, spent, repairs, failed=True)
+        return ReplayState(
+            messages,
+            next_index,
+            turns_used,
+            spent,
+            repairs,
+            escalated_to=escalated_to,
+            last_prompt_tokens=last_prompt,
+            failed=True,
+        )
 
     # The worker died after a billed reply with no usable outcome, before failing the run.
     if last_reply is not None and last_reply["stop_reason"] in STOPS_WITHOUT_OUTCOME:
@@ -127,13 +153,22 @@ def rebuild_messages(rows: Sequence[Mapping[str, Any]]) -> ReplayState:
             turns_used,
             spent,
             repairs,
+            escalated_to=escalated_to,
+            last_prompt_tokens=last_prompt,
             unhandled_stop=last_reply["stop_reason"],
         )
 
     # The worker died after writing a final-looking reply but before judging it.
     if last_reply is not None and last_reply["stop_reason"] == "end_turn":
         return ReplayState(
-            messages, next_index, turns_used, spent, repairs, unjudged_answer=last_reply["content"]
+            messages,
+            next_index,
+            turns_used,
+            spent,
+            repairs,
+            escalated_to=escalated_to,
+            last_prompt_tokens=last_prompt,
+            unjudged_answer=last_reply["content"],
         )
 
     # The worker died mid-tool: calls from the last reply with no tool_result.
@@ -144,7 +179,16 @@ def rebuild_messages(rows: Sequence[Mapping[str, Any]]) -> ReplayState:
             for tc in last_reply["tool_calls"]
             if tc["id"] not in confirmed
         ]
-    return ReplayState(messages, next_index, turns_used, spent, repairs, pending_tool_calls=pending)
+    return ReplayState(
+        messages,
+        next_index,
+        turns_used,
+        spent,
+        repairs,
+        escalated_to=escalated_to,
+        last_prompt_tokens=last_prompt,
+        pending_tool_calls=pending,
+    )
 
 
 def replay_ledger(run_id: UUID) -> ReplayState:

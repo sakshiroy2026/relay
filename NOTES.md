@@ -262,3 +262,14 @@ Response: cost recorded, then error. Migration 008 tenants.run_mode: demo (fake,
 $0, default) vs live (Haiku + real tools, $0.05/run). scripts/live_smoke.py is
 the paid proof (refuses without key and --yes-spend). Demo run b9fcb695 OK.
 New dep: anthropic. 25 new tests (173 total).
+
+## P5 — Repair rung 3 + model fallback (built for $0)
+
+Built by Claude Code; see learn/P5_ESCALATION.md. Explain-back owed.
+Sonnet 5.5 only as a last resort: rung 3 after Haiku's answer AND its re-ask
+fail (a repair_requested row with escalate_to; sticky, replay remembers it), or
+a per-turn fallback when Haiku is still down after 3 retries (model_call records
+fallback_from). Both only on a real provider and only if pricing.estimate()
+(pessimistic: all prompt tokens uncached) fits the remaining budget, checked
+BEFORE the call. check_run refined: the same reply after a re-ask isn't "paid
+twice". 7 new tests (180 total).

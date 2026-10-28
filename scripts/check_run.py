@@ -3,7 +3,8 @@
 Usage: python -m scripts.check_run <run_id>
 
 Checks: step indexes are 0..n-1 with no gaps, and no model reply was paid for
-twice (no two model_call rows with the same content + tool calls). Day 16 adds
+twice (no two model_call rows with the same content + tool calls, unless a
+repair_requested row sits between them: a re-ask may get the same answer). Day 16 adds
 the shape checks a stale worker could break if fencing failed: the ledger starts
 with run_started, every tool_call / tool_result answers the latest model_call,
 no tool call is confirmed twice, and nothing follows a verdict — except a
@@ -45,6 +46,7 @@ def find_problems(steps: Sequence[Mapping[str, Any]]) -> list[str]:
         problems.append(f"step 0 is {steps[0]['kind']!r}, not run_started")
 
     seen: dict[str, int] = {}
+    repairs_seen = 0  # a re-ask may legitimately get the same answer again (Day 9 / P5)
     asked: set[str] = set()  # tool call ids the latest model_call asked for
     confirmed: set[str] = set()  # ... of those, the ones with a tool_result
     verdict_at: int | None = None
@@ -57,8 +59,15 @@ def find_problems(steps: Sequence[Mapping[str, Any]]) -> list[str]:
                 problems.append(f"{kind} at step {i} comes after the verdict at step {verdict_at}")
             continue
 
-        if kind == "model_call":
-            key = json.dumps([p["content"], p["tool_calls"]], sort_keys=True)
+        if kind == "repair_requested":
+            repairs_seen += 1
+        elif kind == "model_call":
+            # raw_content (real models) carries per-call thinking signatures, so two
+            # genuinely separate calls never collide; the fake has none (P1)
+            key = json.dumps(
+                [p["content"], p["tool_calls"], p.get("raw_content"), repairs_seen],
+                sort_keys=True,
+            )
             if key in seen:
                 problems.append(f"model_call at step {i} repeats step {seen[key]}")
             else:
