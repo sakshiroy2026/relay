@@ -15,7 +15,9 @@ COMES OUT   `event: update` with {run, steps} JSON whenever something changed,
 TOUCHES     One dedicated LISTEN connection per open stream (a pool
             connection must not camp in LISTEN), plus pool reads on each wake.
             Fine at demo scale; at real scale one shared listener task would
-            fan out to streams — noted in learn/DAY11.md.
+            fan out to streams — noted in learn/DAY11.md. The LISTEN
+            connection skips a PgBouncer pooler (Neon's `-pooler` host):
+            transaction pooling drops LISTEN, so it goes to the direct host.
 FAILS WHEN  The client disconnects: the generator is closed and the LISTEN
             connection dropped. Database errors end the stream; the page
             falls back to polling.
@@ -27,6 +29,7 @@ from typing import Any
 from uuid import UUID
 
 import psycopg
+from psycopg.conninfo import conninfo_to_dict, make_conninfo
 
 from relay.api import repo
 from relay.api.routes.runs import summarize_step
@@ -34,6 +37,22 @@ from relay.config import settings
 
 TICK_SECONDS = 2.0
 TERMINAL = ("succeeded", "failed", "dead")
+
+
+def listen_conninfo(conninfo: str) -> str:
+    """The same database, minus Neon's PgBouncer pooler, for LISTEN.
+
+    A transaction-mode pooler hands each statement to whichever server
+    connection is free, so a LISTEN is forgotten and no notification ever
+    arrives. Neon names the pooled host `<endpoint>-pooler.<region>...` and the
+    direct one `<endpoint>.<region>...`; any other host is returned unchanged.
+    """
+    params = conninfo_to_dict(conninfo)
+    host = params.get("host")
+    if isinstance(host, str) and "-pooler." in host:
+        params["host"] = host.replace("-pooler.", ".", 1)
+        return make_conninfo("", **params)
+    return conninfo
 
 
 def _snapshot(tenant_id: UUID, run_id: UUID) -> tuple[dict[str, Any] | None, list[dict], str]:
@@ -64,7 +83,7 @@ def run_event_stream(tenant_id: UUID, run_id: UUID) -> Generator[str]:
     # A dedicated autocommit connection: LISTEN state is per-connection, and a
     # pooled connection must go back clean. pg_notify fires on commit, so an
     # event can never describe a row that later rolled back.
-    with psycopg.connect(settings.database_url, autocommit=True) as conn:
+    with psycopg.connect(listen_conninfo(settings.database_url), autocommit=True) as conn:
         conn.execute("LISTEN relay_steps")
         while True:
             run, steps, fingerprint = _snapshot(tenant_id, run_id)

@@ -31,6 +31,7 @@ dev = [
     "mypy",
     "pytest",
     "httpx",
+    "cryptography",  # test-only: a throwaway TLS cert for the pinned-fetch tests
 ]
 
 [tool.ruff]

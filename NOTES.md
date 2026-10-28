@@ -295,3 +295,18 @@ visitors ONLY if its tenant is demo-mode (re-checked per request); the page
 prefills it. Browser-verified: a keyless visitor ran a free 14-step run.
 NOT YET BUILT: no Docker in the dev container; the first build is on the server.
 4 new tests (200 total).
+
+## Days 8–17 checked on Neon + Docker (28 Oct)
+
+Checked by Claude Code on the Windows host; see the README "Verified so far" entry (runs `fd340fcd`, `237c86e0`).
+Fixes found: SSE's LISTEN skips Neon's pooler (learn/DAY11.md); the fencing harness refuses to run on Windows
+(no SIGSTOP), the repair/DLQ harness kills with `proc.kill()` so it works there too. Explain-back owed.
+
+## Deploy target change: Render free plan (29 Oct)
+
+Built by Claude Code; see learn/DEPLOY_RENDER.md. Explain-back owed.
+Oracle needed a credit card for sign-up; none available, so the public demo
+goes to Render's free plan: deploy/single/ = one container (API + 2 workers,
+start.sh restart loop), Neon unchanged, HTTPS/URL from Render, Caddy/DuckDNS
+dropped. Verified locally under Render's limits (512 MB / 0.1 CPU): 120 MB
+steady, demo run in ~12 s. The Oracle/VM files stay for a future real server.
