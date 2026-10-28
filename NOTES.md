@@ -248,3 +248,9 @@ only, text cut to page_text_max_chars=8000. Failures keep the Day 8 split.
 mutation check (re-resolving before connect fails the pinning test).
 UNVERIFIED until the first real call: Tavily's wire format (docs host blocked
 from the container). The pinned fetcher bypasses HTTP proxies by design.
+
+## Days 8–17 checked on Neon + Docker (28 Oct)
+
+Checked by Claude Code on the Windows host; see the README "Verified so far" entry (runs `fd340fcd`, `237c86e0`).
+Fixes found: SSE's LISTEN skips Neon's pooler (learn/DAY11.md); the fencing harness refuses to run on Windows
+(no SIGSTOP), the repair/DLQ harness kills with `proc.kill()` so it works there too. Explain-back owed.

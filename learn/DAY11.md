@@ -39,6 +39,7 @@ tenant's run gets `event: gone`, matching the 404 story.
 | fetch-streaming on the page | `EventSource` | EventSource cannot set `Authorization`; the common workaround (key in the query string) puts the key in access logs. The parser is 20 lines |
 | Keep polling as the fallback | SSE only | Old browsers, aggressive proxies, and any server hiccup degrade to the already-proven path instead of a blank page |
 | A dedicated connection per stream | A pooled connection | LISTEN state belongs to a connection; parking one in the pool would poison it. At demo scale (a handful of viewers) this is fine; at real scale one shared listener task fans out to in-process queues — interface unchanged |
+| The LISTEN connection goes to Neon's *direct* host (`listen_conninfo` strips `-pooler`) | Use `DATABASE_URL` as is | Neon's pooled host is PgBouncer in transaction mode: each statement may land on a different server connection, so the LISTEN is forgotten and no bell ever arrives. Found when the branch was first run on Neon (the stream still worked, but only at the 2 s tick) |
 
 ## 4. Crash walk
 
@@ -61,6 +62,9 @@ tenant's run gets `event: gone`, matching the 404 story.
   request; a terminal run yields `update` then `done` and the generator ends
   on its own; another tenant's run yields `gone`; the route 401s without a
   key; the trigger's notification carries the run id.
+- On Neon (Windows host, 28 Oct): the trigger test failed at first — no
+  notification through the pooler — and passes since `listen_conninfo`.
+  Full suite on Neon: 117 passed.
 
 ## 6. Questions for Sakshi Roy
 
