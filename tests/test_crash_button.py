@@ -47,12 +47,13 @@ def key_for(db: None) -> Iterator[Any]:
 
 
 def make_run(tenant_id: uuid.UUID, status: str, owner: str | None = OWNER) -> uuid.UUID:
-    """A run no live worker can claim: 'running' with a fresh (unexpired) lease."""
+    """A run no live worker can claim: a fresh (unexpired) lease, and max_attempts = 0
+    so even an ownerless 'pending' run is skipped by the claim query."""
     with pool.connection() as conn:
         row = conn.execute(
             "INSERT INTO runs (tenant_id, input, agent_version, status, lease_owner, "
-            "lease_expires_at) VALUES (%s, %s, 'pytest', %s, %s, "
-            "CASE WHEN %s::text IS NULL THEN NULL ELSE now() + interval '5 minutes' END) "
+            "lease_expires_at, max_attempts) VALUES (%s, %s, 'pytest', %s, %s, "
+            "CASE WHEN %s::text IS NULL THEN NULL ELSE now() + interval '5 minutes' END, 0) "
             "RETURNING id",
             (tenant_id, Jsonb({"domain": "crash.example"}), status, owner, owner),
         ).fetchone()

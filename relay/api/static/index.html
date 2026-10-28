@@ -408,9 +408,10 @@ function noteKillFromRun(run) {
     kill = null;
   }
   if (t && kill) {
-    if (kill.phase === "arming") {
-      killState("The run finished before the worker's next heartbeat — kill it earlier next time.");
-    }
+    // no takeover happened: the worker completed the run before its next
+    // heartbeat (the kill can only land between steps, never mid-write)
+    killState("The worker finished the run before its next heartbeat, so the kill never landed — " +
+      "start another run and press it earlier.");
     clearInterval(killTicker); killTicker = null;
     kill = null;
   }
