@@ -11,7 +11,7 @@ from collections.abc import Iterator
 import pytest
 from psycopg.types.json import Jsonb
 
-from relay.api.events import run_event_stream
+from relay.api.events import listen_conninfo, run_event_stream
 from relay.config import settings
 
 
@@ -99,8 +99,19 @@ def test_notify_trigger_rings_on_insert(parked_run: tuple[uuid.UUID, str]) -> No
     import psycopg
 
     run_id, _ = parked_run
-    with psycopg.connect(settings.database_url, autocommit=True) as conn:
+    with psycopg.connect(listen_conninfo(settings.database_url), autocommit=True) as conn:
         conn.execute("LISTEN relay_steps")
         insert_step(run_id, 1)
         got = [n.payload for n in conn.notifies(timeout=5, stop_after=1)]
     assert got == [str(run_id)]
+
+
+def test_listen_conninfo_skips_the_neon_pooler() -> None:
+    pooled = (
+        "postgresql://u:p@ep-cool-name-123-pooler.ap-southeast-1.aws.neon.tech/db?sslmode=require"
+    )
+    direct = listen_conninfo(pooled)
+    assert "host=ep-cool-name-123.ap-southeast-1.aws.neon.tech" in direct
+    assert "sslmode=require" in direct and "dbname=db" in direct
+    local = "postgresql://relay@/relay?host=/tmp/relay-pg/sock"
+    assert listen_conninfo(local) == local  # no pooler: unchanged

@@ -28,7 +28,6 @@ FAILS WHEN  The database is unreachable. A run that should be repaired and
 
 import argparse
 import json
-import signal
 import sys
 import time
 import uuid
@@ -229,7 +228,7 @@ def scenario_exhausted(n: int, lease: int) -> dict[str, Any]:
                     )
                     if owner["attempt_count"] > kills:  # it claimed: kill it mid-run
                         time.sleep(0.5)
-                        procs[0].proc.send_signal(signal.SIGKILL)
+                        procs[0].proc.kill()  # SIGKILL on POSIX, TerminateProcess on Windows
                         kills += 1
                         break
                     time.sleep(0.1)

@@ -128,11 +128,11 @@ def iteration(i: int, workers: list[Worker], span_s: float, rng: random.Random) 
     zombie = by_id[zombie_id]
 
     time.sleep(rng.uniform(0, span_s))
-    zombie.proc.send_signal(signal.SIGSTOP)
+    zombie.proc.send_signal(signal.Signals["SIGSTOP"])
     paused_at = db_now()
     before = load_steps(run_id)  # what was committed when it froze
     if run_row(run_id)["status"] != "running":
-        zombie.proc.send_signal(signal.SIGCONT)
+        zombie.proc.send_signal(signal.Signals["SIGCONT"])
         return {**out, "outcome": "no pause (run finished first)"}
     known = {s["step_index"] for s in before}
     out["paused_after"] = f"step {before[-1]['step_index']} ({before[-1]['kind']})"
@@ -140,13 +140,13 @@ def iteration(i: int, workers: list[Worker], span_s: float, rng: random.Random) 
     took_over = wait_for(lambda: run_row(run_id)["lease_owner"] != zombie_id, 60, poll_s=0.02)
     takeover_s = (db_now() - paused_at).total_seconds()
     if not took_over:
-        zombie.proc.send_signal(signal.SIGCONT)
+        zombie.proc.send_signal(signal.Signals["SIGCONT"])
         return {**out, "outcome": "no takeover within 60 s"}
 
     time.sleep(rng.uniform(0, RESUME_JITTER_S))
     status_at_wake = run_row(run_id)["status"]
     wake_mark = len(zombie.log_text())
-    zombie.proc.send_signal(signal.SIGCONT)
+    zombie.proc.send_signal(signal.Signals["SIGCONT"])
 
     statuses = wait_terminal([run_id], timeout_s=90, poll_s=0.05)
     reacted = wait_for(
@@ -251,6 +251,10 @@ def summarize(lines: list[dict[str, Any]], conditions: dict[str, Any]) -> dict[s
 
 
 def main() -> None:
+    # SIGSTOP/SIGCONT are POSIX-only (looked up by name below so the module still
+    # imports and type-checks on Windows, where test_check_run uses next_kind).
+    if not hasattr(signal, "SIGSTOP"):  # Windows
+        raise SystemExit("needs SIGSTOP/SIGCONT: run it in WSL or a cloud container")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--n", type=int, default=100)
     parser.add_argument("--workers", type=int, default=3)
@@ -289,7 +293,7 @@ def main() -> None:
     finally:
         for wk in workers:  # never leave a frozen process behind
             if wk.proc.poll() is None:
-                wk.proc.send_signal(signal.SIGCONT)
+                wk.proc.send_signal(signal.Signals["SIGCONT"])
         stop_workers(workers)
 
     conditions = {
