@@ -292,9 +292,44 @@ through once the 45 s had elapsed.
 A run can still end `model_unavailable` if Google's per-minute quota is hit
 anyway. The page shows that honestly rather than hiding it.
 
+### On Render: `b0a3aea7`
+
+Same day, 11:50 UTC, on the deployed site (`relay-sakshi.onrender.com`, Render
+Free plan, Postgres on **Neon**). `/demo-config` reported `real_ai: true`,
+`gemini-3.5-flash-lite`, 30 of 30 runs left. A script did what a visitor does:
+fetch the demo key from `/demo-config`, `POST /v1/runs` with `real_ai: true`
+(→ `mode=public_real`, 29 left), and once the first model call was in the
+ledger, `POST /v1/runs/{id}/crash`, the endpoint the page's *Kill the worker*
+button calls. Free tier, $0 billed.
+
+```
+  0 run_started    api
+  1 model_call     …:30   -> web_search      $0.000549
+  2 tool_call      …:30      web_search
+  3 tool_result    …:30      web_search failed (canned index, no entry)
+  4 model_call     …:30   -> fetch_page      $0.000580
+  5 tool_call      …:30      fetch_page
+  6 tool_result    …:30      fetch_page failed (404)
+  7 model_call     …:30   -> save_company    $0.000968
+  8 tool_call      …:30      save_company
+  9 tool_result    …:30      save_company ok
+      ← …:30 dies at its next heartbeat
+ 10 model_call     …:29   -> final answer    $0.001071
+ 11 final          …:29      Razorpay | sources 1 | flagged []
+```
+
+`succeeded`, `attempt_count` 2, 4 model calls, 7,252 in / 397 out tokens,
+priced $0.003168, 22 s from created to finished. The two writers are two worker
+processes in the one Render container. The kill was requested 3 s in but lands
+at the owner's next heartbeat (that is the design: the flag is read there), so
+`…:30` got through step 9 first. The takeover's first request replayed three
+signed turns it never made, and Gemini accepted it, just as `39d7666b` showed
+locally. The record matches the local one (Razorpay, India, Financial
+Technology, nothing flagged), and the canned-tools prompt held it to 4 calls
+here too.
+
 ### What was NOT verified
 
-- **Nothing on Render yet.** These runs are local, against local Postgres.
 - **No `live`-mode run** (Gemini + *real* tools): that needs `TAVILY_API_KEY`,
   and the pinned-IP fetcher bypasses HTTP proxies by design, so it can't be
   checked from this container anyway.
@@ -302,8 +337,9 @@ anyway. The page shows that honestly rather than hiding it.
   publishes it per model (AI Studio → *View your active rate limits*). 25 of the
   day's 30 runs were still unspent when this was written, so the cap was never
   reached in anger.
-- The crash was `proc.kill()` on a local worker, not the demo page's button on
-  Render.
+- The Render crash went through the `/crash` endpoint the button calls, from a
+  script, not a click on the page itself, so the page's own rendering of a
+  real-AI takeover was not watched.
 
 ## 10. Interview lines
 

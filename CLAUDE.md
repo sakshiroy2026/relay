@@ -46,11 +46,19 @@ bill is $0.
 The public page has a **"Run with real AI"** toggle: 30 real-AI runs a day
 shared by all visitors (`PUBLIC_REAL_RUNS_PER_DAY`), counted as a `count(*)` of
 `public_real` runs inside `create_run`'s per-tenant advisory lock (migration
-010 is one partial index). Over the cap the run becomes a demo run and says so;
-one real-AI run at a time, because the free tier fits one. Visitor real-AI runs
+010 is one partial index). Over the cap the run becomes a demo run and says so.
+Real-AI runs are also **spaced 45 s apart** (`repo.PUBLIC_REAL_MIN_GAP_SECONDS`,
+429 + `Retry-After`, nothing created): the free tier is limited per MINUTE as
+well as per day, about ten requests, and two runs back to back 429 each other
+mid-run. That pacing lives at the API gate, never as a sleep in a worker — a
+worker that sleeps mid-call holds a lease it isn't using. Visitor real-AI runs
 get the real model with the **fake** tools — never let a stranger choose a URL
-this server fetches. 251 tests, all $0 and offline. Details:
-`learn/P7_GEMINI.md`.
+this server fetches, and note that a canned-tools run gets `CANNED_TOOLS_NOTE`
+appended to its system prompt (without it a real model searches six times for
+nothing; `live` runs keep P1's exact prompt bytes). 254 tests, all $0 and
+offline. Five real runs verified it locally, one of them killed mid-run and
+resumed, and one more on Render (`b0a3aea7`, killed and resumed there too) —
+run ids and what was *not* checked: `learn/P7_GEMINI.md` §9.
 
 **Money, restated for the free tier:** never enable billing on the Google
 project and never ask Sakshi for a card. "Free" still costs *quota*, so the
