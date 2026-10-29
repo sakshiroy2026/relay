@@ -70,7 +70,7 @@ def test_live_tenant_runs_use_the_real_model_with_a_tight_budget(
 ) -> None:
     run = created_run(tenant)
     assert run["input"]["mode"] == "live"
-    assert resolve_mode(run["input"]["mode"]) == ("anthropic", "real")
+    assert resolve_mode(run["input"]["mode"]) == ("gemini", "real")
     assert float(run["budget_usd"]) == settings.live_run_budget_usd
 
 

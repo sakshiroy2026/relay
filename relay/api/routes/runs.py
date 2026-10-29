@@ -24,11 +24,17 @@ Caller = Annotated[Principal, Depends(guarded)]
 
 class CreateRunRequest(BaseModel):
     domain: str = Field(min_length=3, max_length=253)
+    # P7, Option A: a public visitor opting one run into the real (free-tier)
+    # model. Demo-mode tenants only — a live tenant's runs are already real.
+    real_ai: bool = False
 
 
 class CreateRunResponse(BaseModel):
     run_id: UUID
     status: str
+    mode: str = "demo"  # what this run actually got: demo / public_real / live
+    real_ai_runs_left: int = 0  # the shared allowance left today, after this run
+    note: str | None = None  # plain English when the mode is not what was asked for
 
 
 # A client key is any 1-255 printable-ASCII characters (a UUID is typical).
@@ -46,6 +52,15 @@ def create_run(
 
     Same key + same body -> the original run (header `Idempotent-Replayed: true`),
     even when the tenant is at its concurrency cap. Same key + different body -> 422.
+
+    `real_ai` (P7) opts one run into the real free-tier model. It is a
+    demo-tenant feature: a live tenant already runs the real model, so asking
+    is a client bug and answered 409 rather than silently ignored. Once the
+    day's shared allowance is spent the run is still created — on the free
+    scripted model — and `mode` / `note` say so. While another visitor's
+    real-AI run started less than `PUBLIC_REAL_MIN_GAP_SECONDS` ago the answer
+    is 429 with `Retry-After`, and nothing is created: the free tier's
+    per-minute quota needs that gap between runs.
     """
     if idempotency_key is not None and not (
         0 < len(idempotency_key) <= IDEMPOTENCY_KEY_MAX
@@ -56,6 +71,14 @@ def create_run(
             status_code=400,
             detail=f"Idempotency-Key must be 1-{IDEMPOTENCY_KEY_MAX} printable ASCII characters",
         )
+    if body.real_ai and principal.run_mode != "demo":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "real_ai is the public demo's opt-in; this tenant is "
+                f"{principal.run_mode}-mode and already runs the real model"
+            ),
+        )
     try:
         created = repo.create_run(
             principal.tenant_id,
@@ -63,11 +86,22 @@ def create_run(
             principal.max_concurrent_runs,
             idempotency_key,
             principal.run_mode,
+            real_ai=body.real_ai,
         )
     except repo.IdempotencyMismatch as exc:
         raise HTTPException(
             status_code=422,
             detail="this Idempotency-Key was already used with a different request body",
+        ) from exc
+    except repo.RealAIBusy as exc:
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                "a real-AI run started moments ago; the free tier's per-minute quota "
+                f"needs ~{repo.PUBLIC_REAL_MIN_GAP_SECONDS}s between runs — "
+                "try again shortly"
+            ),
+            headers={"Retry-After": "15"},
         ) from exc
     except repo.ConcurrencyLimit as exc:
         raise HTTPException(
@@ -80,7 +114,19 @@ def create_run(
         ) from exc
     if created["replayed"]:
         response.headers["Idempotent-Replayed"] = "true"
-    return CreateRunResponse(run_id=created["run_id"], status=created["status"])
+    note = None
+    if body.real_ai and created["mode"] != "public_real":
+        note = (
+            "today's real-AI runs are used up; this run uses the demo model "
+            "(the allowance resets at midnight US Pacific)"
+        )
+    return CreateRunResponse(
+        run_id=created["run_id"],
+        status=created["status"],
+        mode=created["mode"],
+        real_ai_runs_left=created["real_ai_runs_left"],
+        note=note,
+    )
 
 
 @router.post("/runs/{run_id}/crash", status_code=202)
@@ -89,8 +135,10 @@ def crash_run(run_id: UUID, principal: Caller) -> dict:
     another worker resume it from the ledger.
 
     The flag is read at the worker's next heartbeat; the worker clears it and
-    exits like `docker kill` (no cleanup). Demo-mode tenants only: their runs
-    use the free scripted model, so a crash can never waste a paid call.
+    exits like `docker kill` (no cleanup). Demo-mode tenants only, so a crash
+    can never waste a paid call: their runs are the free scripted model, or
+    (P7) the real model on Google's free tier, where a resumed run re-asks at
+    $0 and costs only a few of the day's free requests.
     """
     if principal.run_mode != "demo":
         raise HTTPException(

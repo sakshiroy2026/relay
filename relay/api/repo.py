@@ -18,6 +18,12 @@ FAILS WHEN  Database errors propagate. create_run raises ConcurrencyLimit
             body returns that run (replayed, never blocked by the cap: it
             creates nothing); for a DIFFERENT body it raises
             IdempotencyMismatch. The key row commits with the run.
+            A public real-AI run (P7) that would break the day's shared cap is
+            not refused: it is quietly created as a `demo` run instead, and the
+            caller is told which mode it actually got. One that arrives while
+            another real-AI run started less than PUBLIC_REAL_MIN_GAP_SECONDS
+            ago raises RealAIBusy and creates nothing — the free tier's
+            per-minute quota needs that gap between runs.
 """
 
 import hashlib
@@ -33,6 +39,53 @@ from relay.db import pool
 
 AGENT_VERSION = "enrich@v2"
 
+# Google's free-tier request-per-day quota resets at midnight Pacific, so
+# Relay's own daily cap uses the same boundary: when ours reopens, theirs has.
+QUOTA_TIMEZONE = "America/Los_Angeles"
+_SINCE_MIDNIGHT = (
+    f"created_at >= date_trunc('day', now() AT TIME ZONE '{QUOTA_TIMEZONE}') "
+    f"AT TIME ZONE '{QUOTA_TIMEZONE}'"
+)
+_COUNT_REAL_TODAY = (
+    "SELECT count(*) FROM runs "
+    "WHERE tenant_id = %s AND (input->>'mode') = 'public_real' AND " + _SINCE_MIDNIGHT
+)
+
+# Google's free tier is limited per MINUTE as well as per day, and measured on
+# gemini-3.5-flash-lite that minute allows about ten requests per project. One
+# real-AI run is 4-8 model calls, so two runs started back to back 429 each
+# other mid-run (measured, P7: run 967422f9 died that way).
+#
+# So real-AI runs are spaced here, at the gate, rather than slowed down inside a
+# worker: waiting costs nothing while nothing has been created, and a worker
+# that sleeps mid-run is a worker holding a lease it isn't using.
+#
+# One window does both jobs. While it is open no second real-AI run starts, so
+# runs never overlap; and because it is measured from when a run was CREATED, a
+# run that hangs stops holding the gate shut once the window passes — one bad
+# run can't close the real-AI demo for the rest of the day.
+PUBLIC_REAL_MIN_GAP_SECONDS = 45
+_COUNT_REAL_RECENT = (
+    "SELECT count(*) FROM runs "
+    "WHERE tenant_id = %s AND (input->>'mode') = 'public_real' "
+    f"AND created_at > now() - interval '{PUBLIC_REAL_MIN_GAP_SECONDS} seconds'"
+)
+
+
+def real_runs_left(tenant_id: UUID) -> int:
+    """How many public real-AI runs this tenant has left today (never negative).
+
+    Read outside any lock, so it is a display number: the authoritative check
+    is the identical count inside create_run's advisory lock.
+    """
+    cap = settings.public_real_runs_per_day
+    if cap <= 0:
+        return 0
+    with pool.connection() as conn:
+        row = conn.execute(_COUNT_REAL_TODAY, (tenant_id,)).fetchone()
+    used = 0 if row is None else int(row[0])
+    return max(cap - used, 0)
+
 
 class IdempotencyMismatch(Exception):
     """The Idempotency-Key was already used by this tenant for a different request body."""
@@ -41,6 +94,10 @@ class IdempotencyMismatch(Exception):
 def request_hash(body: dict[str, Any]) -> str:
     """Same body -> same hash, whatever the key order the client sent."""
     return hashlib.sha256(json.dumps(body, sort_keys=True).encode()).hexdigest()
+
+
+class RealAIBusy(Exception):
+    """A real-AI run started too recently; the free tier's per-minute quota needs the gap."""
 
 
 class ConcurrencyLimit(Exception):
@@ -57,11 +114,11 @@ def create_run(
     max_concurrent: int,
     idempotency_key: str | None = None,
     run_mode: str = "demo",
+    real_ai: bool = False,
 ) -> dict[str, Any]:
-    body_hash = request_hash({"domain": domain})  # what the CLIENT sent; the mode is ours
-    payload = {"domain": domain, "mode": run_mode}  # the run keeps its mode for life (P1)
-    # live runs spend real money: they get the tight live budget, demo runs the default
-    budget = settings.live_run_budget_usd if run_mode == "live" else None
+    # What the CLIENT sent; the mode is ours. `real_ai` only joins the hash when
+    # it is on, so keys minted before P7 keep hashing to exactly what they did.
+    body_hash = request_hash({"domain": domain} | ({"real_ai": True} if real_ai else {}))
     with pool.connection() as conn:
         with conn.cursor() as cur:
             # One advisory lock per tenant for the length of this transaction:
@@ -73,6 +130,14 @@ def create_run(
             cur.execute(
                 "SELECT pg_advisory_xact_lock(hashtextextended(%s::text, 42))", (tenant_id,)
             )
+            # P7: the day's real-AI allowance, counted under the same lock as
+            # the insert below, so the last run of the day can only be handed
+            # out once however many visitors ask for it at the same moment.
+            cur.execute(_COUNT_REAL_TODAY, (tenant_id,))
+            counted = cur.fetchone()
+            used_today = 0 if counted is None else int(counted[0])
+            left = max(settings.public_real_runs_per_day - used_today, 0)
+
             if idempotency_key is not None:
                 cur.execute(
                     "SELECT k.request_hash, r.id, r.status::text FROM idempotency_keys k "
@@ -85,7 +150,15 @@ def create_run(
                         raise IdempotencyMismatch(idempotency_key)
                     # checked BEFORE the cap: a replay creates nothing, so it
                     # must not be refused for capacity
-                    return {"run_id": seen[1], "status": seen[2], "replayed": True}
+                    cur.execute("SELECT input->>'mode' FROM runs WHERE id = %s", (seen[1],))
+                    seen_mode = cur.fetchone()
+                    return {
+                        "run_id": seen[1],
+                        "status": seen[2],
+                        "replayed": True,
+                        "mode": (seen_mode[0] if seen_mode and seen_mode[0] else "demo"),
+                        "real_ai_runs_left": left,
+                    }
 
             cur.execute(
                 "SELECT count(*) FROM runs "
@@ -97,6 +170,22 @@ def create_run(
             if open_runs >= max_concurrent:
                 raise ConcurrencyLimit(open_runs, max_concurrent)  # rolls the lock back too
 
+            if real_ai and left > 0:
+                cur.execute(_COUNT_REAL_RECENT, (tenant_id,))
+                recent = cur.fetchone()
+                if recent is not None and int(recent[0]) > 0:
+                    # Nothing is created and no allowance is spent: the caller
+                    # waits and asks again. Rolls the advisory lock back too.
+                    raise RealAIBusy
+                run_mode = "public_real"
+                left -= 1  # this run takes one of the day's allowance
+            # real_ai asked for with nothing left: the run stays `demo` (the free
+            # scripted model) and the returned `mode` tells the caller so.
+
+            payload = {"domain": domain, "mode": run_mode}  # keeps its mode for life (P1)
+            # a real model call is metered whoever asked for it: real-model runs
+            # get the tight real-run budget, demo runs the table default
+            budget = settings.live_run_budget_usd if run_mode in ("live", "public_real") else None
             cur.execute(
                 "INSERT INTO runs (tenant_id, input, agent_version, budget_usd) "
                 "VALUES (%s, %s, %s, COALESCE(%s, 0.25)) RETURNING id, status",
@@ -116,7 +205,13 @@ def create_run(
                     "VALUES (%s, %s, %s, %s)",
                     (tenant_id, idempotency_key, body_hash, created[0]),
                 )
-    return {"run_id": created[0], "status": created[1], "replayed": False}
+    return {
+        "run_id": created[0],
+        "status": created[1],
+        "replayed": False,
+        "mode": run_mode,
+        "real_ai_runs_left": left,
+    }
 
 
 def get_run(tenant_id: UUID, run_id: UUID) -> dict[str, Any] | None:

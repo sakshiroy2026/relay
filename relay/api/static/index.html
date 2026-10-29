@@ -69,6 +69,20 @@
   .examples { margin-top: 10px; font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
   .examples button { font-size: 13px; padding: 3px 10px; border-radius: 999px; background: var(--chip); border-color: transparent; }
   .coldstart { margin-top: 10px; font-size: 12.5px; color: var(--muted); }
+  /* P7: the real-AI opt-in */
+  .realai { display: none; margin-top: 12px; padding: 10px 12px; border: 1px solid var(--line);
+            border-radius: 10px; background: var(--chip); font-size: 13.5px; }
+  .realai.on { display: block; }
+  .realai label { display: flex; gap: 9px; align-items: flex-start; cursor: pointer; }
+  .realai input { width: 16px; height: 16px; margin: 2px 0 0; flex: 0 0 auto; accent-color: var(--accent); }
+  .realai b { font-weight: 600; }
+  .realai .sub { display: block; color: var(--muted); font-size: 12.5px; margin-top: 3px; }
+  .realai .left { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .realai.spent label { opacity: .6; }
+  .waiting { margin-top: 8px; font-size: 12.5px; color: var(--warn-ink);
+             background: var(--warn-bg); padding: 7px 10px; border-radius: 8px; display: none; }
+  .waiting.on { display: block; }
+  .pill.real { background: color-mix(in srgb, var(--ok) 16%, transparent); color: var(--ok); }
   details.adv { margin-top: 12px; font-size: 13px; color: var(--muted); }
   details.adv summary { cursor: pointer; }
   details.adv .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
@@ -166,8 +180,22 @@
       <button id="startBtn" class="primary" type="submit">Start run</button>
     </form>
     <div class="examples" id="examples">try:</div>
-    <p class="coldstart">Free-tier host: a first visit after a quiet spell can take ~1 minute to wake. The public
-      demo runs a scripted fake model (same runtime, $0 spend), so the records it writes are canned, not researched.</p>
+    <div class="realai" id="realaiBox">
+      <label>
+        <input type="checkbox" id="realai">
+        <span>
+          <b>Run with real AI</b> — <span id="realaiModel">Gemini</span>, on Google's free tier
+          <span class="sub">The same durable runtime, but a real model doing the thinking. Shared
+            allowance: <span class="left" id="realaiLeft">—</span> real-AI runs left today, one at a time.
+            Web search and page fetches stay canned, so a stranger's run can't make this server fetch
+            arbitrary URLs — the model reasons, and says which fields it couldn't source.</span>
+        </span>
+      </label>
+      <div class="waiting" id="realaiWait"></div>
+    </div>
+    <p class="coldstart">Free-tier host: a first visit after a quiet spell can take ~1 minute to wake. By default the
+      public demo runs a scripted fake model (same runtime, $0 spend), so the records it writes are canned, not
+      researched.</p>
     <details class="adv">
       <summary>Your own API key / open an existing run</summary>
       <div class="row">
@@ -185,6 +213,7 @@
       <div class="runhead">
         <div class="stat"><div class="label">Run</div><div class="value" id="rId">—</div></div>
         <div class="stat"><div class="label">Status</div><div class="value"><span class="pill" id="rStatus">—</span></div></div>
+        <div class="stat"><div class="label">Model</div><div class="value"><span class="pill" id="rModel">—</span></div></div>
         <div class="stat"><div class="label">Attempt</div><div class="value" id="rAttempt">—</div></div>
         <div class="stat"><div class="label">Owner now</div><div class="value" id="rOwner">—</div></div>
         <div class="stat"><div class="label">Cost so far</div><div class="value" id="rCost">—</div><div class="bar"><div id="rBar"></div></div></div>
@@ -248,6 +277,9 @@
 "use strict";
 // The API key lives in page memory; localStorage only as a convenience (may be unavailable).
 const $ = (id) => document.getElementById(id);
+let realAiOffered = false;   // does this host offer real-AI runs at all?
+let runsLeft = 0;            // the shared allowance left today (from /demo-config)
+let runMode = null;          // the mode the run on screen actually got (null = not known yet)
 const KEY_STORE = "relay.apiKey";
 const PALETTE = ["#0f8b8d", "#d9730d", "#7b4bd6", "#c2185b", "#2e7d32", "#5d6d7e"];
 const TERMINAL = new Set(["succeeded", "failed", "dead"]);
@@ -269,15 +301,43 @@ function loadKey() { try { return localStorage.getItem(KEY_STORE) || ""; } catch
 function saveKey(v) { try { v ? localStorage.setItem(KEY_STORE, v) : localStorage.removeItem(KEY_STORE); } catch {} }
 $("key").value = loadKey();
 // No key of your own? The server may offer a public demo key (its tenant runs
-// the free scripted model; the server refuses to offer a paid one).
-if (!$("key").value) {
-  fetch("/demo-config").then((r) => r.json()).then((c) => {
+// the free scripted model; the server refuses to offer a paid one). The same
+// endpoint says whether real-AI runs are on and how many are left today, so
+// the counter below is the database's number, never one kept in this tab.
+function loadConfig() {
+  return fetch("/demo-config").then((r) => r.json()).then((c) => {
     if (c.demo_key && !$("key").value) {
       $("key").value = c.demo_key;
       say(c.note || "using the public demo key", "info");
     }
+    realAiOffered = !!c.real_ai;
+    $("realaiBox").classList.toggle("on", realAiOffered);
+    if (c.real_ai_model) $("realaiModel").textContent = c.real_ai_model;
+    showRunsLeft(c.real_ai_runs_left);
+    return c;
   }).catch(() => {});
 }
+
+function showRunsLeft(n) {
+  if (typeof n !== "number") return;
+  runsLeft = n;
+  $("realaiLeft").textContent = String(n);
+  const spent = n <= 0;
+  $("realaiBox").classList.toggle("spent", spent);
+  $("realai").disabled = spent;
+  if (spent) {
+    $("realai").checked = false;
+    waiting("Today's real-AI runs are used up — runs use the demo model until midnight US Pacific.");
+  } else {
+    waiting("");
+  }
+}
+
+function waiting(text) {
+  $("realaiWait").textContent = text || "";
+  $("realaiWait").classList.toggle("on", !!text);
+}
+loadConfig();
 $("key").addEventListener("change", () => saveKey($("key").value.trim()));
 $("forget").addEventListener("click", () => { $("key").value = ""; saveKey(""); });
 
@@ -320,10 +380,21 @@ function stopKillUi() {
   $("killState").style.display = "none";
 }
 
-function reset(id) {
+const MODEL_PILL = {
+  public_real: ["real AI", "real"],
+  live: ["real AI", "real"],
+  demo: ["demo model", ""],
+};
+
+function reset(id, mode) {
   clearTimeout(timer);
   stopKillUi();
   runId = id; shownSteps = 0; companyShown = false; workerColors = new Map();
+  // null = opening a run by id: its mode is unknown until the run row arrives
+  runMode = mode || null;
+  const [label, cls] = runMode ? (MODEL_PILL[runMode] || MODEL_PILL.demo) : ["—", ""];
+  $("rModel").textContent = label;
+  $("rModel").className = "pill " + cls;
   $("steps").replaceChildren();
   $("noSteps").hidden = false;
   $("banner").style.display = "none"; $("banner").replaceChildren();
@@ -334,26 +405,47 @@ function reset(id) {
   try { history.replaceState(null, "", "#run=" + id); } catch {}
 }
 
+// Real-AI runs are spaced: the free tier allows about ten model calls a minute
+// and one run is several of them, so the API refuses a run that would start too
+// soon after the last one. A 429 is the queue, not a failure — wait and ask
+// again instead of pretending. Patience here covers the server's whole gap.
+const BUSY_WAIT_MS = 7000;
+const BUSY_TRIES = 10;
+
 $("startForm").addEventListener("submit", async (ev) => {
   ev.preventDefault(); say("");
   $("startBtn").disabled = true;
+  const wantReal = realAiOffered && $("realai").checked;
+  // one Idempotency-Key per click: if the network drops the reply and the
+  // request is retried, the API hands back the same run instead of a second one
+  const idem = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : null;
+  const body = JSON.stringify({ domain: $("domain").value.trim(), real_ai: wantReal });
   try {
-    // one Idempotency-Key per click: if the network drops the reply and the
-    // request is retried, the API hands back the same run instead of a second one
-    const idem = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : null;
-    const out = await api("/v1/runs", {
-      method: "POST",
-      body: JSON.stringify({ domain: $("domain").value.trim() }),
-      headers: idem ? { "Idempotency-Key": idem } : {},
-    });
-    reset(out.run_id);
+    let out = null;
+    for (let tries = 0; out === null; tries++) {
+      try {
+        out = await api("/v1/runs", {
+          method: "POST", body, headers: idem ? { "Idempotency-Key": idem } : {},
+        });
+      } catch (e) {
+        // 429 while asking for real AI = the queue, not a failure. Anything
+        // else (and a queue that never clears) is reported as it happened.
+        if (!(wantReal && e.status === 429) || tries >= BUSY_TRIES) throw e;
+        waiting(`Waiting for a real-AI slot — the free tier allows one run at a time (try ${tries + 1} of ${BUSY_TRIES})…`);
+        await new Promise((r) => setTimeout(r, BUSY_WAIT_MS));
+      }
+    }
+    waiting("");
+    reset(out.run_id, out.mode);
+    if (typeof out.real_ai_runs_left === "number") showRunsLeft(out.real_ai_runs_left);
+    if (out.note) say(out.note, "info");
     stream();
-  } catch (e) { say(e.message); }
+  } catch (e) { waiting(""); say(e.message); }
   finally { $("startBtn").disabled = false; }
 });
 $("openBtn").addEventListener("click", () => {
   const id = $("openId").value.trim();
-  if (id) { say(""); reset(id); stream(); }
+  if (id) { say(""); reset(id, null); stream(); }
 });
 
 // ── the kill button ────────────────────────────────────────────────────────
@@ -420,6 +512,13 @@ function noteKillFromRun(run) {
 // ── rendering ──────────────────────────────────────────────────────────────
 function renderRun(run) {
   $("rId").textContent = String(run.id).slice(0, 8);
+  const mode = (run.input && run.input.mode) || runMode;
+  if (mode !== runMode) {
+    runMode = mode;
+    const [label, cls] = MODEL_PILL[mode] || MODEL_PILL.demo;
+    $("rModel").textContent = label;
+    $("rModel").className = "pill " + cls;
+  }
   $("rStatus").textContent = run.status;
   $("rStatus").className = "pill " + run.status;
   $("rAttempt").textContent = run.attempt_count;

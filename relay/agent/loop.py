@@ -32,7 +32,7 @@ from dataclasses import asdict
 from typing import Any
 from uuid import UUID
 
-from relay.agent.prompts import SYSTEM_PROMPT
+from relay.agent.prompts import system_prompt
 from relay.agent.tools import TOOL_SCHEMAS, ToolContext, dispatch_tool
 from relay.config import settings
 from relay.core.costs import refresh_run_totals
@@ -41,7 +41,7 @@ from relay.core.repair import correction_message, parse_final
 from relay.core.replay import assistant_message, replay_ledger
 from relay.core.retry import FatalError, RetryableError, call_with_retries
 from relay.llm.client import Response, ToolCall
-from relay.llm.factory import make_llm, planner_model, resolve_mode
+from relay.llm.factory import escalation_allowed, make_llm, planner_model, resolve_mode
 from relay.llm.pricing import estimate, price
 from relay.obs.tracing import tracer
 
@@ -220,6 +220,10 @@ def run_agent(
         )
         return None
 
+    # Constant for the whole run: it is part of the prefix every thought
+    # signature / thinking block is bound to (P7).
+    system = system_prompt(tools)
+
     # --- P5: a stronger model as a last resort, only on a real provider, only if affordable ---
     escalated = state.escalated_to  # from the ledger: a resumed run stays escalated
     if escalated:
@@ -229,7 +233,7 @@ def run_agent(
     def can_afford(candidate: str) -> bool:
         # pessimistic (no cache) price of one call on `candidate`, checked BEFORE it is made
         return (
-            llm_provider == "anthropic"
+            escalation_allowed(llm_provider)  # Gemini has no second provider to escalate to
             and bool(candidate)
             and candidate != model
             and spent + estimate(candidate, last_prompt + 1000) <= budget_usd
@@ -282,7 +286,7 @@ def run_agent(
                 reply, tries = call_with_retries(
                     lambda: llm.call(
                         model=use,
-                        system=SYSTEM_PROMPT,
+                        system=system,
                         messages=messages,
                         tools=TOOL_SCHEMAS,
                     ),

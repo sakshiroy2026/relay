@@ -19,6 +19,10 @@ dependencies = [
     "bcrypt",
     # P1: the official Anthropic SDK for the real model (2.x sends API version 2026-10-21)
     "anthropic>=2.3,<3",
+    # P7: the Gemini adapter speaks the REST API over the same HTTP client the
+    # Anthropic SDK already ships, so this adds nothing to the image. Declared
+    # anyway: relying on another package's dependency is not a dependency.
+    "httpx2",
     # Day 17 observability
     "prometheus-client",
     "opentelemetry-sdk",

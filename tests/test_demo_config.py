@@ -36,7 +36,8 @@ def key_for(db: None) -> Iterator[object]:
 
 def test_unset_offers_nothing(monkeypatch: pytest.MonkeyPatch, db: None) -> None:
     monkeypatch.setattr(main_mod.settings, "public_demo_key", None)
-    assert TestClient(app).get("/demo-config").json() == {"demo_key": None}
+    body = TestClient(app).get("/demo-config").json()
+    assert body["demo_key"] is None and body["real_ai_runs_left"] == 0
 
 
 def test_a_demo_tenant_key_is_offered(monkeypatch: pytest.MonkeyPatch, key_for) -> None:
@@ -48,9 +49,11 @@ def test_a_demo_tenant_key_is_offered(monkeypatch: pytest.MonkeyPatch, key_for) 
 
 def test_a_live_tenant_key_is_never_offered(monkeypatch: pytest.MonkeyPatch, key_for) -> None:
     monkeypatch.setattr(main_mod.settings, "public_demo_key", key_for("live"))
-    assert TestClient(app).get("/demo-config").json() == {"demo_key": None}
+    body = TestClient(app).get("/demo-config").json()
+    assert body["demo_key"] is None and body["real_ai_runs_left"] == 0
 
 
 def test_a_wrong_key_is_not_offered(monkeypatch: pytest.MonkeyPatch, db: None) -> None:
     monkeypatch.setattr(main_mod.settings, "public_demo_key", "rly_nope.nope")
-    assert TestClient(app).get("/demo-config").json() == {"demo_key": None}
+    body = TestClient(app).get("/demo-config").json()
+    assert body["demo_key"] is None and body["real_ai_runs_left"] == 0
