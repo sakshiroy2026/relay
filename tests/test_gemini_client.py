@@ -479,13 +479,17 @@ def start(tenant: dict[str, Any], real_ai: bool = True, domain: str = "p.example
 
 
 def park(tenant: dict[str, Any]) -> None:
-    """Finish whatever is open, so the one-at-a-time pacing doesn't block the next ask."""
+    """Finish this tenant's runs and backdate them, as if the pacing gap had passed.
+
+    The gap is measured from created_at, so a test that wants the NEXT run has to
+    move the clock rather than wait 45 real seconds.
+    """
     from relay.db import pool
 
     with pool.connection() as conn:
         conn.execute(
-            "UPDATE runs SET status = 'dead' WHERE tenant_id = %s AND status IN "
-            "('pending', 'running')",
+            "UPDATE runs SET status = 'dead', created_at = created_at - interval '1 hour' "
+            "WHERE tenant_id = %s",
             (tenant["id"],),
         )
 
@@ -548,20 +552,68 @@ def test_the_cap_is_counted_per_day_not_per_process(
     assert repo.real_runs_left(public_tenant["id"]) == 0  # the switch is off: nothing offered
 
 
-def test_one_real_ai_run_at_a_time(
+def test_real_ai_runs_are_spaced_for_the_per_minute_quota(
     public_tenant: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The free tier's per-minute quota fits one run; the second asker waits."""
+    """The free tier is limited per minute too, so runs don't start back to back."""
+    from relay.api import repo
+
     monkeypatch.setattr(settings, "public_real_runs_per_day", 30)
     assert start(public_tenant).status_code == 202
     busy = start(public_tenant, domain="q.example")
     assert busy.status_code == 429
-    assert busy.headers["Retry-After"] == "10"
-    assert "one at a time" in busy.json()["detail"]
+    assert busy.headers["Retry-After"] == "15"
+    assert "per-minute quota" in busy.json()["detail"]
     # nothing was created and no allowance was spent
-    from relay.api import repo
-
     assert repo.real_runs_left(public_tenant["id"]) == 29
+
+    park(public_tenant)  # the gap has passed
+    assert start(public_tenant, domain="r.example").status_code == 202
+    assert repo.real_runs_left(public_tenant["id"]) == 28
+
+
+def test_a_hung_real_ai_run_stops_holding_the_gate(
+    public_tenant: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The gap is measured from creation, so one stuck run can't close the day."""
+    from relay.api import repo
+    from relay.db import pool
+
+    monkeypatch.setattr(settings, "public_real_runs_per_day", 30)
+    stuck = start(public_tenant).json()["run_id"]
+    with pool.connection() as conn:  # still 'running', but started long ago
+        conn.execute(
+            "UPDATE runs SET status = 'running', created_at = created_at - interval "
+            f"'{repo.PUBLIC_REAL_MIN_GAP_SECONDS + 5} seconds' WHERE id = %s",
+            (stuck,),
+        )
+    assert start(public_tenant, domain="q.example").json()["mode"] == "public_real"
+
+
+def test_canned_tool_runs_are_told_the_internet_is_canned() -> None:
+    """Measured: without this note a real model searches six times for nothing."""
+    from relay.agent.prompts import SYSTEM_PROMPT, system_prompt
+
+    assert system_prompt("real") == SYSTEM_PROMPT  # P1's exact bytes, untouched
+    canned = system_prompt("fake")
+    assert canned.startswith(SYSTEM_PROMPT)  # the note is appended, never woven in
+    assert "no live internet" in canned and "at most ONCE" in canned
+    # the prompt is part of every signature's prefix, so it must be stable per run
+    assert system_prompt("fake") == canned
+
+
+def test_the_canned_search_says_it_is_canned_instead_of_answering_nothing() -> None:
+    """An empty list makes a real model rephrase and retry; the truth costs one turn."""
+    from relay.agent.tools import dispatch_tool
+
+    found = dispatch_tool("web_search", {"query": "Acme Payments"})
+    assert found.ok and "acmepay.example" in found.content  # the canned query still works
+
+    missing = dispatch_tool("web_search", {"query": "stripe.com revenue"})
+    assert missing.ok is False
+    assert "canned" in missing.content and "Rephrasing will not help" in missing.content
+    assert missing.attempts == 1  # a healthy tool with no answer is not retried
+    assert missing.breaker_open is False  # and its breaker is untouched
 
 
 def test_the_default_run_is_still_the_instant_demo(public_tenant: dict[str, Any]) -> None:

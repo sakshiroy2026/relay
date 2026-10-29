@@ -186,8 +186,9 @@
         <span>
           <b>Run with real AI</b> — <span id="realaiModel">Gemini</span>, on Google's free tier
           <span class="sub">The same durable runtime, but a real model doing the thinking. Shared
-            allowance: <span class="left" id="realaiLeft">—</span> real-AI runs left today. Web search and
-            page fetches stay canned, so a stranger's run can't make this server fetch arbitrary URLs.</span>
+            allowance: <span class="left" id="realaiLeft">—</span> real-AI runs left today, one at a time.
+            Web search and page fetches stay canned, so a stranger's run can't make this server fetch
+            arbitrary URLs — the model reasons, and says which fields it couldn't source.</span>
         </span>
       </label>
       <div class="waiting" id="realaiWait"></div>
@@ -404,10 +405,11 @@ function reset(id, mode) {
   try { history.replaceState(null, "", "#run=" + id); } catch {}
 }
 
-// Real-AI runs are paced one at a time: the free tier allows about ten model
-// calls a minute and one run is six to ten of them. A 429 from the API means
-// another visitor is mid-run, so we wait and ask again instead of pretending.
-const BUSY_WAIT_MS = 6000;
+// Real-AI runs are spaced: the free tier allows about ten model calls a minute
+// and one run is several of them, so the API refuses a run that would start too
+// soon after the last one. A 429 is the queue, not a failure — wait and ask
+// again instead of pretending. Patience here covers the server's whole gap.
+const BUSY_WAIT_MS = 7000;
 const BUSY_TRIES = 10;
 
 $("startForm").addEventListener("submit", async (ev) => {
@@ -429,7 +431,7 @@ $("startForm").addEventListener("submit", async (ev) => {
         // 429 while asking for real AI = the queue, not a failure. Anything
         // else (and a queue that never clears) is reported as it happened.
         if (!(wantReal && e.status === 429) || tries >= BUSY_TRIES) throw e;
-        waiting(`Waiting for the one real-AI slot — another visitor's run is in flight (try ${tries + 1} of ${BUSY_TRIES})…`);
+        waiting(`Waiting for a real-AI slot — the free tier allows one run at a time (try ${tries + 1} of ${BUSY_TRIES})…`);
         await new Promise((r) => setTimeout(r, BUSY_WAIT_MS));
       }
     }

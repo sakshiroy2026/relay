@@ -21,9 +21,9 @@ FAILS WHEN  Database errors propagate. create_run raises ConcurrencyLimit
             A public real-AI run (P7) that would break the day's shared cap is
             not refused: it is quietly created as a `demo` run instead, and the
             caller is told which mode it actually got. One that arrives while
-            another visitor's real-AI run is still in flight raises RealAIBusy
-            and creates nothing — the free tier's per-minute quota only has
-            room for one at a time.
+            another real-AI run started less than PUBLIC_REAL_MIN_GAP_SECONDS
+            ago raises RealAIBusy and creates nothing — the free tier's
+            per-minute quota needs that gap between runs.
 """
 
 import hashlib
@@ -51,19 +51,24 @@ _COUNT_REAL_TODAY = (
     "WHERE tenant_id = %s AND (input->>'mode') = 'public_real' AND " + _SINCE_MIDNIGHT
 )
 
-# The free tier allows roughly ten requests a minute per project and one run is
-# 6-10 model calls, so two real-AI runs at once would simply 429 each other.
-# One at a time is therefore the honest limit, and the page shows the wait.
-PUBLIC_REAL_CONCURRENCY = 1
-# A run that is still 'running' after this long is stuck or abandoned (its
-# worker died and nothing reclaimed it). It stops holding the queue shut, so one
-# bad run can't close the real-AI demo for the rest of the day.
-PUBLIC_REAL_STALE_MINUTES = 5
-_COUNT_REAL_OPEN = (
+# Google's free tier is limited per MINUTE as well as per day, and measured on
+# gemini-3.5-flash-lite that minute allows about ten requests per project. One
+# real-AI run is 4-8 model calls, so two runs started back to back 429 each
+# other mid-run (measured, P7: run 967422f9 died that way).
+#
+# So real-AI runs are spaced here, at the gate, rather than slowed down inside a
+# worker: waiting costs nothing while nothing has been created, and a worker
+# that sleeps mid-run is a worker holding a lease it isn't using.
+#
+# One window does both jobs. While it is open no second real-AI run starts, so
+# runs never overlap; and because it is measured from when a run was CREATED, a
+# run that hangs stops holding the gate shut once the window passes — one bad
+# run can't close the real-AI demo for the rest of the day.
+PUBLIC_REAL_MIN_GAP_SECONDS = 45
+_COUNT_REAL_RECENT = (
     "SELECT count(*) FROM runs "
     "WHERE tenant_id = %s AND (input->>'mode') = 'public_real' "
-    "AND status IN ('pending', 'running') "
-    f"AND created_at > now() - interval '{PUBLIC_REAL_STALE_MINUTES} minutes'"
+    f"AND created_at > now() - interval '{PUBLIC_REAL_MIN_GAP_SECONDS} seconds'"
 )
 
 
@@ -92,7 +97,7 @@ def request_hash(body: dict[str, Any]) -> str:
 
 
 class RealAIBusy(Exception):
-    """Another visitor's real-AI run is still in flight; the free tier allows one."""
+    """A real-AI run started too recently; the free tier's per-minute quota needs the gap."""
 
 
 class ConcurrencyLimit(Exception):
@@ -166,9 +171,9 @@ def create_run(
                 raise ConcurrencyLimit(open_runs, max_concurrent)  # rolls the lock back too
 
             if real_ai and left > 0:
-                cur.execute(_COUNT_REAL_OPEN, (tenant_id,))
-                in_flight = cur.fetchone()
-                if in_flight is not None and int(in_flight[0]) >= PUBLIC_REAL_CONCURRENCY:
+                cur.execute(_COUNT_REAL_RECENT, (tenant_id,))
+                recent = cur.fetchone()
+                if recent is not None and int(recent[0]) > 0:
                     # Nothing is created and no allowance is spent: the caller
                     # waits and asks again. Rolls the advisory lock back too.
                     raise RealAIBusy

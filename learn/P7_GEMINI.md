@@ -107,7 +107,8 @@ received are the ones worker B sent back.
 | The cap is a count of `runs` rows | a counters table | One partial index, nothing to keep in sync, and the count is already inside `create_run`'s per-tenant advisory lock — so two visitors racing for the last run of the day cannot both get it |
 | Over the cap → a demo run, not an error | 429 | A visitor who clicked the toggle still gets a working demo of the thing the page is actually about. `mode` and `note` tell them which model ran |
 | One real-AI run at a time, 429 + `Retry-After` while busy | let them run concurrently | The free tier allows roughly ten requests a minute per project and one run is 6–10 of them; two at once would simply 429 each other mid-run. Nothing is created and no allowance is spent, so the page can wait and ask again |
-| A real-AI run stuck over 5 minutes stops holding the slot | hold it until it finishes | One abandoned run would otherwise close the real-AI demo for the rest of the day |
+| Pace real-AI runs **at the API gate** (45 s between runs), not with a sleep in the worker | back off inside the model call | Measured: two runs back to back hit the per-minute quota (`967422f9`). Waiting at the gate is free because nothing has been created yet; a worker sleeping mid-call holds a lease it isn't using, and Day 8's ~3 s of backoff can't outwait a per-minute quota anyway. Measuring the gap from `created_at` also means a hung run stops blocking the gate by itself |
+| Tell a canned-tools run there is no live internet (`CANNED_TOOLS_NOTE`) | let the model discover the walls | Measured: without it the model obeyed rule 1 by searching six times for nothing — 12 model calls for a 4-call job. The prompt is per tools-provider and constant for the run, so signatures stay valid; `live` runs keep P1's exact bytes |
 | The day resets at midnight **US Pacific** | UTC, or IST | That is when Google's own per-day quota resets. When Relay's cap reopens, the quota behind it has too |
 | `real_ai` joins the idempotency body hash only when true | always include it | Keys minted before P7 keep hashing to exactly what they hashed then, so a retry across the deploy still replays instead of 422-ing |
 
@@ -130,7 +131,7 @@ A visitor starts a real-AI run and hits **Kill the worker** at step 3.
 
 ## 7. The proofs
 
-**All $0 and no network: 43 tests in `tests/test_gemini_client.py`** drive the
+**All $0 and no network: 46 tests in `tests/test_gemini_client.py`** drive the
 adapter against `httpx2.MockTransport`.
 
 | What | Test |
@@ -155,11 +156,16 @@ adapter against `httpx2.MockTransport`.
 | **a non-demo tenant cannot use the opt-in** | `test_a_live_tenant_cannot_use_the_public_opt_in` |
 | pre-P7 idempotency hashes unchanged | `test_the_opt_in_does_not_change_pre_p7_idempotency_hashes` |
 
-251 tests pass in total (208 before P7). `ruff format`, `ruff check` and
+| canned-tool runs are told the internet is canned | `test_canned_tool_runs_are_told_the_internet_is_canned` |
+| the canned search says so instead of answering nothing | `test_the_canned_search_says_it_is_canned_instead_of_answering_nothing` |
+| real-AI runs are spaced for the per-minute quota | `test_real_ai_runs_are_spaced_for_the_per_minute_quota` |
+| a hung real-AI run stops holding the gate | `test_a_hung_real_ai_run_stops_holding_the_gate` |
+
+254 tests pass in total (208 before P7). `ruff format`, `ruff check` and
 `mypy` are clean.
 
-**The one real check:** see §9. Nothing in this document claims a real Gemini
-call until that section names run ids.
+**The real check** — 5 real runs on the free tier, $0 — is in §9, including the
+two things it found that the tests could not.
 
 ## 8. Questions for Sakshi Roy
 
@@ -203,8 +209,101 @@ call until that section names run ids.
 
 ## 9. What was actually verified
 
-Filled in from the real check, with run ids. Until then: built and tested for
-$0, nothing real has run.
+Real Gemini calls, 29 Oct 2026, **free tier, $0 billed**, against local
+Postgres 16 in a cloud container (not Neon). About 37 requests in total. Every
+run below is `mode=public_real` — the real model with the canned tools, exactly
+what a visitor's toggled run gets. The dollar figures are what the paid tier
+would have charged.
+
+**The probe** (1 request): all five real tool schemas accepted as
+`parametersJsonSchema` on the first try, no 400. The reply called
+`lookup_existing(domain="acmepay.example")`, carried a `thoughtSignature` on
+the `functionCall` part, and reported 742 / 0 / 21 tokens. Gemini **does** send
+`functionCall.id` (`call_257147`), so Relay's deterministic stand-in ids are a
+fallback, not the normal path.
+
+| Run | Domain | Status | Model calls | Priced | What it showed |
+|---|---|---|---|---|---|
+| `20bb09d1` | acmepay.example | succeeded | 8 | $0.004859 | the first real end-to-end run: valid record, signed part on every turn |
+| `967422f9` | stripe.com | **failed** | 6 | $0.003168 | `model_unavailable` — a per-minute 429 after ~16 requests in ~90 s. Correctly classified as retryable (the quota was back ~2 min later), but Day 8's ~3 s of backoff can't outwait a per-minute quota |
+| `7e558570` | stripe.com | succeeded | 12 | $0.008941 | six empty searches and two failed fetches before it gave up and answered from its own knowledge |
+| `39d7666b` | razorpay.com | **succeeded after a kill** | 4 | $0.003310 | **the headline proof** — see below |
+| `627152e7` | github.com | succeeded | 6 | $0.004811 | after both fixes; `save_company` rejected once and the model corrected its own args |
+
+### The headline proof: `39d7666b`
+
+The worker was killed 7 s in, with no cleanup, like `docker kill`.
+
+```
+  0 run_started    api
+  1 model_call     vm:3172   -> web_search      $0.000549   1 signed part
+  2 tool_call      vm:3172      web_search
+  3 tool_result    vm:3172      web_search failed (canned index, no entry)
+      ← vm:3172 killed here
+  4 model_call     vm:3180   -> fetch_page      $0.000580   1 signed part
+  5 tool_call      vm:3180      fetch_page
+  6 tool_result    vm:3180      fetch_page failed
+  7 model_call     vm:3180   -> save_company    $0.000981   1 signed part
+  8 tool_call      vm:3180      save_company
+  9 tool_result    vm:3180      save_company ok
+ 10 model_call     vm:3180   -> final answer    $0.001200   1 signed part
+ 11 final          vm:3180      Razorpay | sources 1 | flagged []
+```
+
+One takeover, two writers, and `vm:3180`'s first request was accepted — which
+is the proof that matters: Gemini validates a replayed `thoughtSignature`
+against everything before it, so if replay had retyped `vm:3172`'s turn in its
+own words, step 4 would have been a 400 instead of a model call. The record came
+out clean (Razorpay, India, Financial Technology, nothing flagged).
+
+### Two things the real runs found, and the fixes
+
+**1. An empty search result makes a real model loop.** The canned
+`web_search` answered `[]` for any query it didn't know, which reads as *"the
+web has nothing"* — so the model rephrased and searched again, five or six
+times, obeying rule 1 of the system prompt ("every fact must come from a page
+you fetched"). Twelve model calls for a four-call job.
+
+Two changes: the canned search now *says* it is canned
+(`ToolError`: "this demo's search index holds a few fixed queries, not the live
+web. Rephrasing will not help"), and — the part that actually worked — runs with
+canned tools get `CANNED_TOOLS_NOTE` appended to the system prompt, which says
+there is no live internet, to search at most once, and to flag what can't be
+sourced. The tool-result wording alone changed nothing; the prompt took the next
+run from 12 calls to **4**.
+
+The prompt is chosen from the run's tools provider and is constant for the run,
+because it is part of the prefix every signature is bound to. A `live` run with
+real tools gets `SYSTEM_PROMPT` byte-for-byte as P1 left it.
+
+**2. The free tier is limited per minute, not just per day.** `967422f9` died
+because two runs started back to back put ~16 requests into one minute. The
+limit on `gemini-3.5-flash-lite` measures out at about ten.
+
+The fix is pacing **at the gate, not in the worker**: `create_run` refuses a
+real-AI run if another was created in the last `PUBLIC_REAL_MIN_GAP_SECONDS`
+(45), with 429 + `Retry-After: 15` and nothing created. Waiting is free while
+nothing exists; a worker that sleeps mid-run is a worker holding a lease it
+isn't using. One window does two jobs — runs never overlap, and because it is
+measured from creation, a hung run stops holding the gate shut once the window
+passes. Verified live: the next `create_run` raised `RealAIBusy` and went
+through once the 45 s had elapsed.
+
+A run can still end `model_unavailable` if Google's per-minute quota is hit
+anyway. The page shows that honestly rather than hiding it.
+
+### What was NOT verified
+
+- **Nothing on Render yet.** These runs are local, against local Postgres.
+- **No `live`-mode run** (Gemini + *real* tools): that needs `TAVILY_API_KEY`,
+  and the pinned-IP fetcher bypasses HTTP proxies by design, so it can't be
+  checked from this container anyway.
+- **The free tier's actual per-day limit** is unknown: Google no longer
+  publishes it per model (AI Studio → *View your active rate limits*). 25 of the
+  day's 30 runs were still unspent when this was written, so the cap was never
+  reached in anger.
+- The crash was `proc.kill()` on a local worker, not the demo page's button on
+  Render.
 
 ## 10. Interview lines
 

@@ -58,8 +58,9 @@ def create_run(
     is a client bug and answered 409 rather than silently ignored. Once the
     day's shared allowance is spent the run is still created — on the free
     scripted model — and `mode` / `note` say so. While another visitor's
-    real-AI run is in flight the answer is 429 with `Retry-After`, and nothing
-    is created: the free tier's per-minute quota fits one real run at a time.
+    real-AI run started less than `PUBLIC_REAL_MIN_GAP_SECONDS` ago the answer
+    is 429 with `Retry-After`, and nothing is created: the free tier's
+    per-minute quota needs that gap between runs.
     """
     if idempotency_key is not None and not (
         0 < len(idempotency_key) <= IDEMPOTENCY_KEY_MAX
@@ -96,10 +97,11 @@ def create_run(
         raise HTTPException(
             status_code=429,
             detail=(
-                "another visitor's real-AI run is still in flight; the free tier "
-                "has room for one at a time — try again in a few seconds"
+                "a real-AI run started moments ago; the free tier's per-minute quota "
+                f"needs ~{repo.PUBLIC_REAL_MIN_GAP_SECONDS}s between runs — "
+                "try again shortly"
             ),
-            headers={"Retry-After": "10"},
+            headers={"Retry-After": "15"},
         ) from exc
     except repo.ConcurrencyLimit as exc:
         raise HTTPException(

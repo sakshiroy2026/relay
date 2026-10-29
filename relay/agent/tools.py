@@ -117,7 +117,18 @@ _FAKE_PAGES: dict[str, PageText] = {
 
 def _fake_web_search(args: WebSearchInput, _ctx: ToolContext | None) -> str:
     _maybe_fail("web_search")
-    results = _FAKE_SEARCH.get(args.query.strip().lower(), [])
+    results = _FAKE_SEARCH.get(args.query.strip().lower())
+    if results is None:
+        # An empty list reads like "the web has nothing", so a real model
+        # rephrases and searches again, and again — five wasted turns of a
+        # free-tier quota (measured, P7). Say what is actually true instead:
+        # this index is canned. The model then moves on in one turn.
+        raise ToolError(
+            f"no canned result for {args.query.strip()!r}: this demo's search index holds "
+            "a few fixed queries, not the live web. Rephrasing will not help — continue "
+            "from what you already know and use flag_for_review for anything you "
+            "cannot source."
+        )
     return json.dumps([r.model_dump(mode="json") for r in results])
 
 

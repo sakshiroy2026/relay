@@ -32,7 +32,7 @@ from dataclasses import asdict
 from typing import Any
 from uuid import UUID
 
-from relay.agent.prompts import SYSTEM_PROMPT
+from relay.agent.prompts import system_prompt
 from relay.agent.tools import TOOL_SCHEMAS, ToolContext, dispatch_tool
 from relay.config import settings
 from relay.core.costs import refresh_run_totals
@@ -220,6 +220,10 @@ def run_agent(
         )
         return None
 
+    # Constant for the whole run: it is part of the prefix every thought
+    # signature / thinking block is bound to (P7).
+    system = system_prompt(tools)
+
     # --- P5: a stronger model as a last resort, only on a real provider, only if affordable ---
     escalated = state.escalated_to  # from the ledger: a resumed run stays escalated
     if escalated:
@@ -282,7 +286,7 @@ def run_agent(
                 reply, tries = call_with_retries(
                     lambda: llm.call(
                         model=use,
-                        system=SYSTEM_PROMPT,
+                        system=system,
                         messages=messages,
                         tools=TOOL_SCHEMAS,
                     ),

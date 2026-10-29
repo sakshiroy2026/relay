@@ -43,8 +43,8 @@ Instead of an agent loop living in a process that dies when the process dies, ev
 | Prometheus `/metrics` + `/ops` dashboard compiled from the ledger; OTel traces with `steps.trace_id` | ✅ working (screenshot above), 5 tests |
 | SSE for the demo page (LISTEN/NOTIFY push, fetch-streaming, polling fallback) | ✅ median 3.7 ms push latency, browser-tested, 5 tests |
 | Dead-letter queue (reaper for exhausted runs, `requeued` ledger marker, operator CLI) | ✅ measured: requeued runs resume from their ledger, 0 restarts (results below) |
-| Real model provider — **Google Gemini on the free tier** (`gemini-3.5-flash-lite` by default, raw REST over the HTTP client already in the image; reply parts replayed verbatim so `thoughtSignature`s stay valid across crashes; per-day quota 429 separated from per-minute) | ✅ built, 43 tests with a mock transport ($0 and offline); first real call pending (details: [`learn/P7_GEMINI.md`](learn/P7_GEMINI.md)) |
-| Public **"Run with real AI"** toggle: 30 real-AI runs/day shared by all visitors, counted in Postgres inside the existing per-tenant advisory lock; over the cap the run quietly uses the demo model and says so; one at a time (the free tier's per-minute limit); real model + **canned** tools, so no visitor picks a URL this server fetches | ✅ built, tested (migration 010 = one partial index) — details: [`learn/P7_GEMINI.md`](learn/P7_GEMINI.md) |
+| Real model provider — **Google Gemini on the free tier** (`gemini-3.5-flash-lite` by default, raw REST over the HTTP client already in the image; reply parts replayed verbatim so `thoughtSignature`s stay valid across crashes; per-day quota 429 separated from per-minute) | ✅ **working on real calls** — 5 real runs incl. one killed mid-run and resumed by a second worker (run ids below); 46 tests with a mock transport ($0 and offline) — details: [`learn/P7_GEMINI.md`](learn/P7_GEMINI.md) |
+| Public **"Run with real AI"** toggle: 30 real-AI runs/day shared by all visitors, counted in Postgres inside the existing per-tenant advisory lock; over the cap the run quietly uses the demo model and says so; runs spaced 45 s apart for the free tier's per-minute quota; real model + **canned** tools, so no visitor picks a URL this server fetches | ✅ built and exercised end to end (migration 010 = one partial index) — details: [`learn/P7_GEMINI.md`](learn/P7_GEMINI.md) |
 | Claude adapter (Haiku 5.5 via the official SDK, thinking blocks replayed verbatim; rung-3 escalation to Sonnet 5.5) | ✅ built and tested through the SDK with a mock transport ($0); **unused — no Anthropic key**, kept for the day there is one (details: [`learn/P1_REAL_MODEL.md`](learn/P1_REAL_MODEL.md)) |
 | Eval harness: field scoring vs a hand-labelled golden set, Sonnet 5.5 judge for `industry`, accuracy + precision (flagging = abstaining), CI gate on committed live results | ✅ built, 16 tests, demo eval run; real numbers need the Day 18 labels (details: [`learn/P6_EVAL.md`](learn/P6_EVAL.md)) |
 | CI (GitHub Actions: ruff, mypy, all tests on Postgres 16, eval gate; no secrets, no paid calls) | ✅ added |
@@ -53,6 +53,21 @@ Instead of an agent loop living in a process that dies when the process dies, ev
 ---
 
 ## Measured results
+
+**Real model, free tier (P7, 29 Oct 2026, local Postgres in a cloud container, $0 billed).**
+5 real `public_real` runs on `gemini-3.5-flash-lite`, priced at Google's paid
+rate for the ledger's sake: `20bb09d1` acmepay.example (8 model calls,
+$0.004859), `967422f9` stripe.com (**failed**, `model_unavailable` — a
+per-minute 429, which is what the 45 s gap between real-AI runs now prevents),
+`7e558570` stripe.com (12 calls, $0.008941 — the run that showed a real model
+re-searching an empty canned index), `39d7666b` razorpay.com (**killed mid-run
+at step 3; worker `vm:3180` took over at step 4 and finished**, 4 calls,
+$0.003310, record clean and nothing flagged), `627152e7` github.com (6 calls,
+$0.004811). The takeover is the one that matters: Gemini validates a replayed
+`thoughtSignature` against every byte before it, so a resumed run whose history
+had been retyped would have been rejected, not resumed. Not yet verified on
+Render, and no `live`-mode run (real tools need a Tavily key) —
+[`learn/P7_GEMINI.md`](learn/P7_GEMINI.md) §9 lists what was and wasn't checked.
 
 `python -m chaos.crash_test --n 200`: each iteration starts a run, waits a random 0–10 s, runs `docker kill` on the container that owns the run, waits for the run to finish, and checks its ledger. The runs go one at a time.
 

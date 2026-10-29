@@ -344,4 +344,20 @@ public_real runs inside create_run's existing per-tenant advisory lock
 becomes a demo run and the page says so; one real-AI run at a time (429 +
 Retry-After, nothing created) because the free tier fits one. Visitor real-AI
 runs get the real model with the FAKE tools, so no stranger picks a URL this
-server fetches. 251 tests pass (43 new), all $0 and offline.
+server fetches. 254 tests pass (46 new), all $0 and offline.
+
+The real check (29 Oct, free tier, $0, ~37 requests, local Postgres) found two
+things tests could not. (1) The canned web_search answered [] for unknown
+queries, which reads as "the web has nothing", so a real model rephrased and
+searched six times — 12 model calls for a 4-call job. Fixed by telling the truth
+twice: the tool now raises a ToolError saying the index is canned, and canned-
+tool runs get CANNED_TOOLS_NOTE appended to the system prompt (per tools
+provider, constant for the run, so signatures stay valid; live runs keep P1's
+exact bytes). The prompt is what worked: 12 calls -> 4. (2) The free tier limits
+per MINUTE too (~10 on 3.5-flash-lite), so two runs back to back killed run
+967422f9 with model_unavailable. Fixed at the API gate, not in the worker:
+create_run refuses a real-AI run started within 45 s of the last one (429 +
+Retry-After, nothing created), because waiting is free while nothing exists and
+a worker sleeping mid-call holds a lease it isn't using. Headline proof: run
+39d7666b, killed at step 3, resumed by vm:3180 at step 4, finished clean — which
+only works because the replayed thoughtSignatures were accepted.
