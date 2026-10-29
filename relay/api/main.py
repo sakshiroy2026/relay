@@ -1,4 +1,5 @@
 import logging
+import os
 import time
 from pathlib import Path
 from typing import Any
@@ -56,22 +57,39 @@ def ops_json() -> dict:
 
 @app.get("/demo-config", include_in_schema=False)
 def demo_config() -> dict:
-    """The public demo key, if one is configured AND its tenant runs the free fake model."""
+    """The public demo key, if one is configured AND its tenant runs the free fake model.
+
+    Also P7's honest counter: how many real-AI (Gemini, free tier) runs all
+    visitors still share today. The page polls this, so the number it shows is
+    the database's, not a guess kept in the browser.
+    """
     from fastapi import HTTPException
 
+    from relay.api import repo
     from relay.api.principal import require_principal
 
     key = settings.public_demo_key
+    off: dict = {"demo_key": None, "real_ai": False, "real_ai_runs_left": 0}
     if not key:
-        return {"demo_key": None}
+        return off
     try:
         principal = require_principal(f"Bearer {key}")
     except HTTPException:
-        return {"demo_key": None}  # a stale or wrong key: offer nothing
+        return off  # a stale or wrong key: offer nothing
     if principal.run_mode != "demo":
         log.warning("PUBLIC_DEMO_KEY belongs to a %s tenant: not offered", principal.run_mode)
-        return {"demo_key": None}  # never publish a key that spends money
-    return {"demo_key": key, "note": "public demo: runs use a free scripted model"}
+        return off  # never publish a key that spends money
+    # The toggle is only offered when a key for the model exists on this host
+    # AND the day's cap is above zero; otherwise the page shouldn't promise it.
+    real_ai = bool(os.environ.get("GEMINI_API_KEY")) and settings.public_real_runs_per_day > 0
+    return {
+        "demo_key": key,
+        "note": "public demo: runs use a free scripted model",
+        "real_ai": real_ai,
+        "real_ai_model": settings.gemini_model if real_ai else None,
+        "real_ai_runs_left": repo.real_runs_left(principal.tenant_id) if real_ai else 0,
+        "real_ai_runs_per_day": settings.public_real_runs_per_day if real_ai else 0,
+    }
 
 
 @app.get("/", include_in_schema=False)

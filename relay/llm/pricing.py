@@ -12,11 +12,27 @@ FAILS WHEN  The model has no price -> UnknownModelPrice. The factory checks the
             configured model at boot (assert_priced), so this can't first
             surface after a call was already paid for.
 
-Real prices are Anthropic first-party API rates as published at build time
-(per million tokens): Claude Haiku 5.5 $0.10 in / $0.50 out for prompts up to
-100K tokens and $0.50 / $2.50 above that; Claude Sonnet 5.5 $2 / $10. Cache
-reads cost 0.1x the input rate, 5-minute cache writes 1.25x. Re-check them on
-the provider's pricing page before trusting a bill to the cent.
+Real prices are the providers' first-party API rates as published at build time
+(per million tokens).
+
+Anthropic: Claude Haiku 5.5 $0.10 in / $0.50 out for prompts up to 100K tokens
+and $0.50 / $2.50 above that; Claude Sonnet 5.5 $2 / $10. Cache reads cost 0.1x
+the input rate, 5-minute cache writes 1.25x.
+
+Google (ai.google.dev/gemini-api/docs/pricing, "Standard" tab, page last
+updated 2026-10-28): gemini-3.8-flash $0.75 / $3.75, gemini-3.5-flash-lite
+$0.30 / $2.50, gemini-3.1-flash-lite $0.25 / $1.50, all with thinking billed as
+output. **Relay runs these models on Google's FREE tier, where input and output
+are free and the real bill is $0.** They are priced here at the PAID rate on
+purpose: the per-run budget cap and the /ops spend numbers then mean something,
+and moving to a paid key later changes nothing but the invoice.
+
+Two Google caveats worth knowing: the 3.8-flash rates above double on
+2027-01-01 ($1.50 / $7.50), and this table is not date-aware, so that is a
+manual edit; and free-tier usage may be used to improve Google's products.
+
+Re-check every rate on the provider's pricing page before trusting a bill to
+the cent.
 """
 
 from dataclasses import dataclass
@@ -42,6 +58,11 @@ PRICES: dict[str, Price] = {
     # Real models (P1). Haiku 5.5 is the development default.
     "claude-haiku-5-5": Price(0.10, 0.50, long_prompt=(100_000, 0.50, 2.50)),
     "claude-sonnet-5-5": Price(2.00, 10.00),
+    # Google Gemini (P7). Run on the free tier ($0 billed); priced at the paid
+    # rate so the budget cap and /ops stay honest. gemini_model picks one.
+    "gemini-3.5-flash-lite": Price(0.30, 2.50),
+    "gemini-3.1-flash-lite": Price(0.25, 1.50),
+    "gemini-3.8-flash": Price(0.75, 3.75),  # doubles to 1.50 / 7.50 on 2027-01-01
 }
 
 

@@ -247,7 +247,7 @@ class Crash(Exception):
 def real_model(monkeypatch: pytest.MonkeyPatch) -> Iterator[FakeAPI]:
     api = FakeAPI()
     monkeypatch.setattr(factory.settings, "llm_provider", "anthropic")
-    monkeypatch.setattr(factory, "_anthropic_client", api.client())
+    monkeypatch.setitem(factory._clients, "anthropic", api.client())
     yield api
 
 
@@ -297,7 +297,7 @@ def test_a_billed_refusal_is_recorded_then_fails_the_run(
 
     api = FakeAPI(lambda _b: httpx2.Response(200, json=reply([], "refusal")))
     monkeypatch.setattr(factory.settings, "llm_provider", "anthropic")
-    monkeypatch.setattr(factory, "_anthropic_client", api.client())
+    monkeypatch.setitem(factory._clients, "anthropic", api.client())
     run_id, domain = parked_run
     assert run_agent(run_id, domain, "w", lambda: True, budget_usd=1.0) is None
     steps = load_steps(str(run_id))
@@ -316,14 +316,15 @@ def test_a_billed_refusal_is_recorded_then_fails_the_run(
     assert load_steps(str(run_id))[-1]["payload"]["reason"] == "model_refused"
 
 
-def test_live_mode_without_a_key_fails_the_run_not_the_worker(
+def test_an_unpriced_model_fails_the_run_not_the_worker(
     parked_run: tuple[uuid.UUID, str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """A model the budget can't price never gets called: the run ends, the worker lives."""
     from scripts.check_run import load_steps
 
-    monkeypatch.setattr(factory, "_anthropic_client", None)
+    monkeypatch.setattr(factory.settings, "llm_provider", "anthropic")
     monkeypatch.setattr(factory.settings, "anthropic_model", "claude-not-priced")
     run_id, domain = parked_run
-    assert run_agent(run_id, domain, "w", lambda: True, budget_usd=1.0, mode="live") is None
+    assert run_agent(run_id, domain, "w", lambda: True, budget_usd=1.0) is None
     last = load_steps(str(run_id))[-1]
     assert last["kind"] == "error" and last["payload"]["reason"] == "model_misconfigured"

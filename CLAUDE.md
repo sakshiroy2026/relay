@@ -32,7 +32,32 @@ Read `README.md` (Status, Measured results, Roadmap), `NOTES.md` and the newest
   lines; NOTES.md entry "built by Claude Code … Explain-back owed") → report in a few
   lines → wait for the go.
 
-## Where things stand
+## Where things stand (P7, 29 Oct 2026)
+
+The real model is **Google Gemini on the free tier** — no card, no billing, and
+no Anthropic key ever arrived. `relay/llm/gemini_client.py` is the adapter
+(`GEMINI_MODEL`, default `gemini-3.5-flash-lite`); `live` and the new
+`public_real` run modes both use it. The Claude adapter stays but is **unused**:
+don't delete it, and don't put a Claude model on a path a Gemini run can take
+(`factory.escalation_allowed()` is the gate). Calls are priced at Google's paid
+rates on purpose, so the budget cap and `/ops` keep meaning something while the
+bill is $0.
+
+The public page has a **"Run with real AI"** toggle: 30 real-AI runs a day
+shared by all visitors (`PUBLIC_REAL_RUNS_PER_DAY`), counted as a `count(*)` of
+`public_real` runs inside `create_run`'s per-tenant advisory lock (migration
+010 is one partial index). Over the cap the run becomes a demo run and says so;
+one real-AI run at a time, because the free tier fits one. Visitor real-AI runs
+get the real model with the **fake** tools — never let a stranger choose a URL
+this server fetches. 251 tests, all $0 and offline. Details:
+`learn/P7_GEMINI.md`.
+
+**Money, restated for the free tier:** never enable billing on the Google
+project and never ask Sakshi for a card. "Free" still costs *quota*, so the
+rule stands: state the request count and wait for her "go" before any real
+call.
+
+## Where things stood before P7
 
 `main` has everything up to PR #2 (Days 16, 9, 10, 17, 11, the client
 Idempotency-Key, real tools). Branch `paid-phase` (PR #3) adds, all built and

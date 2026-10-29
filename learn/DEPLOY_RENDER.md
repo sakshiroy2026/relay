@@ -44,13 +44,35 @@ locally with exactly those limits before any sign-up:
 ### Live on Render (29 Oct 2026)
 
 - URL: https://relay-sakshi.onrender.com (service `relay-sakshi`, Singapore,
-  Free plan, branch `deploy-render`, Dockerfile `./deploy/single/Dockerfile`,
-  health check `/healthz`).
+  Free plan, Dockerfile `./deploy/single/Dockerfile`, health check `/healthz`).
+- **Branch: `main`.** The service was first created on `deploy-render`, which
+  was deleted when PR #4 merged. If Render's *Settings → Build & Deploy →
+  Branch* still says `deploy-render`, auto-deploy is pointing at a branch that
+  no longer exists — change it to `main`.
 - First deploy of `bc1a26a`: `/healthz` and `/readyz` OK, `/demo-config`
   offers the demo key, `/` and `/ops` return 200.
 - Public end-to-end run `b6e803fc` (anthropic.com, demo key fetched from
   `/demo-config` like a visitor) succeeded in ~4 s. $0 spent: no
   `ANTHROPIC_API_KEY` on the service.
+
+## 3b. Environment variables on the service
+
+| Variable | Value | Why |
+|---|---|---|
+| `DATABASE_URL` | the Neon connection string | already set |
+| `DEV_TENANT_ID`, `PUBLIC_DEMO_KEY` | the demo tenant and its key | already set |
+| `LEASE_SECONDS` | `15` | a kill is watchable in under a minute |
+| `FAKE_DELAY_SECONDS` | `2.5` | demo runs stream instead of looking pre-rendered |
+| `GEMINI_API_KEY` | the free-tier key | already set; never printed, never in a URL |
+| `GEMINI_MODEL` | `gemini-3.5-flash-lite` | **add** — the config default, pinned so a default change can't move the live model silently |
+| `PUBLIC_REAL_RUNS_PER_DAY` | `30` | **add** — the shared daily allowance; `0` turns the toggle off everywhere |
+
+`GEMINI_MODEL` can be switched to `gemini-3.1-flash-lite` or
+`gemini-3.8-flash` without a code change — both are priced in
+`relay/llm/pricing.py`. Check the free-tier limits first in AI Studio →
+*View your active rate limits* (Google no longer publishes them per model).
+
+The service needs **no** `ANTHROPIC_API_KEY`: the Claude adapter is unused.
 
 ## 4. Render specifics that bit
 
@@ -80,3 +102,7 @@ locally with exactly those limits before any sign-up:
 | Build fails on push | Dockerfile path not set to `deploy/single/Dockerfile` | Service → Settings → Build & Deploy |
 | API up but runs stay pending | Workers died (check logs for `worker N exited`) | `DATABASE_URL`/`DEV_TENANT_ID` env vars; logs say why |
 | `/demo-config` gives null | `PUBLIC_DEMO_KEY` unset, or its tenant isn't demo-mode | Seed a demo tenant, paste its key into the env var |
+| No "Run with real AI" toggle on the page | `/demo-config` says `real_ai: false`: `GEMINI_API_KEY` missing on the service, or `PUBLIC_REAL_RUNS_PER_DAY=0` | Set both, redeploy |
+| Real-AI runs fail with `model_fatal: daily quota exhausted` | the free tier's per-day quota is spent (it is per **project**, not per key) | Wait for midnight US Pacific, or lower `PUBLIC_REAL_RUNS_PER_DAY` so Relay's cap bites first |
+| Real-AI runs fail with `model_misconfigured` | `GEMINI_API_KEY` not visible to the workers | It's a service-level env var, so a redeploy is needed after adding it |
+| A visitor sees "waiting for the one real-AI slot" for a long time | another visitor's real-AI run is in flight, or one is stuck | Expected while one runs; a stuck run stops holding the slot after 5 minutes |

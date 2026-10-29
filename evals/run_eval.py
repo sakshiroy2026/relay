@@ -38,6 +38,7 @@ from chaos.harness import query_one, spawn_workers, stop_workers, wait_terminal
 from evals.scoring import score_record, summarize
 from relay.config import settings
 from relay.db import pool
+from relay.llm.factory import planner_model, resolve_mode
 
 HERE = Path(__file__).parent
 EST_RUN_USD = 0.006  # Haiku 5.5 per run (CLAUDE.md); the results record the real figure
@@ -171,7 +172,8 @@ def main() -> None:
     summary = summarize([r["fields"] for r in rows])
     out = {
         "mode": args.mode,
-        "model": settings.anthropic_model if args.mode == "live" else "fake-planner",
+        # the model the mode actually uses, not a hardcoded provider's
+        "model": planner_model(resolve_mode(args.mode)[0]),
         "judge": args.judge_model if judge else None,
         "commit": git_commit(),
         "golden": str(args.golden),

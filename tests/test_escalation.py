@@ -51,7 +51,7 @@ def provider(monkeypatch: pytest.MonkeyPatch) -> Iterator[Callable[[Scripted], N
     monkeypatch.setattr(retry_mod.time, "sleep", lambda _s: None)  # no real backoff waits
 
     def use(client: Scripted) -> None:
-        monkeypatch.setattr(factory, "_anthropic_client", client)
+        monkeypatch.setitem(factory._clients, "anthropic", client)
 
     yield use
 

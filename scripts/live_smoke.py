@@ -1,19 +1,22 @@
-"""P1/P3 proof: a few REAL runs on the real model, with a hard spending cap.
+"""P1/P3/P7 proof: a few REAL runs on the real model, with a hard spending cap.
 
-WHAT IT IS  The first paid check. Creates N runs for a 'live' tenant (real model,
+WHAT IT IS  The first real check. Creates N runs for a 'live' tenant (real model,
             real tools), one at a time, with one local worker, and records what
-            each one did and cost. Used twice: P1 (does it work at all?) and P3
-            (LLM_EFFORT=low vs medium, is the prompt cache hit?).
+            each one did and cost. Used three times: P1 (does it work at all?),
+            P3 (LLM_EFFORT=low vs medium, is the prompt cache hit?) and P7 (the
+            same on Gemini's free tier, where the costs below are what the run
+            WOULD have cost on the paid tier; the invoice is $0).
 GOES IN     python -m scripts.live_smoke --yes-spend [--runs 3] [--max-total-usd 0.10]
                 [--domains razorpay.com,stripe.com]
-            Needs ANTHROPIC_API_KEY (and TAVILY_API_KEY for real search) in the
-            environment and a database at migration 008+. Refuses to start
-            without --yes-spend: it spends real money.
+            Needs the live provider's key in the environment (GEMINI_API_KEY,
+            or ANTHROPIC_API_KEY while LLM_PROVIDER names Anthropic), plus
+            TAVILY_API_KEY for real search, and a database at migration 008+.
+            Refuses to start without --yes-spend and without that key.
 COMES OUT   The estimate BEFORE anything is spent, then one line per run, then
             chaos/live_smoke_results.json (statuses, cost, tokens, cache share,
             the records, check_run problems).
 TOUCHES     tenants (a 'live-smoke' tenant, created once), runs/steps/companies,
-            one local worker process, the Anthropic API, Tavily, the web.
+            one local worker process, the live provider's API, Tavily, the web.
 FAILS WHEN  Spend reaches --max-total-usd -> stops before the next run (each run
             is also capped by its own budget_usd; at most one call can
             overshoot it). No key -> refuses to start.
@@ -33,10 +36,17 @@ from psycopg.types.json import Jsonb
 from chaos.harness import query_all, query_one, spawn_workers, stop_workers, wait_terminal
 from relay.config import settings
 from relay.db import pool
+from relay.llm.factory import planner_model, resolve_mode
+from relay.llm.pricing import estimate
 from scripts.check_run import check_run
 
 RESULTS = Path(__file__).parent.parent / "chaos" / "live_smoke_results.json"
-EST_PER_RUN_USD = 0.006  # Haiku 5.5, ~40k in + 4k out (CLAUDE.md); measured here, not trusted
+# ~40k input + 4k output per run (CLAUDE.md). Priced from the model the live
+# mode actually uses, so the estimate follows the provider instead of a comment.
+EST_TOKENS = (40_000, 4_000)
+# Which key each provider needs, and whether using it costs money.
+PROVIDER_KEYS = {"anthropic": "ANTHROPIC_API_KEY", "gemini": "GEMINI_API_KEY"}
+FREE_TIER_PROVIDERS = ("gemini",)
 
 
 def live_tenant() -> uuid.UUID:
@@ -107,15 +117,24 @@ def main() -> None:
     args = parser.parse_args()
 
     domains = [d.strip() for d in args.domains.split(",") if d.strip()]
-    est = args.runs * EST_PER_RUN_USD
+    provider, _tools = resolve_mode("live")
+    model = planner_model(provider)
+    est = args.runs * estimate(model, *EST_TOKENS)
+    free = provider in FREE_TIER_PROVIDERS
     print(
-        f"model {settings.anthropic_model}, effort {settings.llm_effort}, "
-        f"{args.runs} runs over {domains}\n"
-        f"estimate ~${est:.3f}; hard stop at ${args.max_total_usd:.2f} total, "
+        f"provider {provider}, model {model}, {args.runs} runs over {domains}\n"
+        f"priced ~${est:.3f}; hard stop at ${args.max_total_usd:.2f} total, "
         f"${settings.live_run_budget_usd:.2f} per run"
+        + (
+            "\nthis provider's FREE tier is in use: the real bill is $0 and the "
+            "numbers above are what the paid tier would have charged"
+            if free
+            else ""
+        )
     )
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        sys.exit("refusing: ANTHROPIC_API_KEY is not set")
+    key = PROVIDER_KEYS.get(provider, "")
+    if key and not os.environ.get(key):
+        sys.exit(f"refusing: {key} is not set")
     if not args.yes_spend:
         sys.exit("refusing: pass --yes-spend to confirm you accept this cost")
 
@@ -146,7 +165,9 @@ def main() -> None:
 
     summary = {
         "conditions": {
-            "model": settings.anthropic_model,
+            "provider": provider,
+            "free_tier": free,
+            "model": model,
             "effort": settings.llm_effort,
             "prompt_cache": settings.llm_prompt_cache,
             "tools_provider": "real",

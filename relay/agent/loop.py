@@ -41,7 +41,7 @@ from relay.core.repair import correction_message, parse_final
 from relay.core.replay import assistant_message, replay_ledger
 from relay.core.retry import FatalError, RetryableError, call_with_retries
 from relay.llm.client import Response, ToolCall
-from relay.llm.factory import make_llm, planner_model, resolve_mode
+from relay.llm.factory import escalation_allowed, make_llm, planner_model, resolve_mode
 from relay.llm.pricing import estimate, price
 from relay.obs.tracing import tracer
 
@@ -229,7 +229,7 @@ def run_agent(
     def can_afford(candidate: str) -> bool:
         # pessimistic (no cache) price of one call on `candidate`, checked BEFORE it is made
         return (
-            llm_provider == "anthropic"
+            escalation_allowed(llm_provider)  # Gemini has no second provider to escalate to
             and bool(candidate)
             and candidate != model
             and spent + estimate(candidate, last_prompt + 1000) <= budget_usd

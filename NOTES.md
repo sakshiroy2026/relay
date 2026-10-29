@@ -322,3 +322,26 @@ os._exit(137) at its next heartbeat; lease expiry + replay do the rest.
 Verified live in the browser (run 484b68fe: killed at step 11, resumed at 12,
 4 model_call rows like an uncrashed run). Render image: LEASE_SECONDS=15,
 FAKE_DELAY_SECONDS=2.5 — at 0.5 s a run finished in ~7 s, too fast to click.
+
+## P7: a real model on Gemini's free tier + a public "real AI" toggle (29 Oct)
+
+Built by Claude Code; see learn/P7_GEMINI.md. Explain-back owed.
+The Anthropic key never arrived, so the real model is now Google Gemini on the
+FREE tier (no card, no billing): relay/llm/gemini_client.py, raw httpx2 on
+generateContent, key in the x-goog-api-key header. GEMINI_MODEL defaults to
+gemini-3.5-flash-lite. The Claude adapter stays, untouched. Gemini's
+thoughtSignatures are the same problem as Claude's thinking blocks, so the
+ledger's existing raw_content replay carried over unchanged. Tool schemas go as
+parametersJsonSchema (titles stripped), which keeps the Optionals,
+additionalProperties and format: uri that the OpenAPI subset would drop. A
+per-minute 429 is retryable; a per-DAY quota 429 is fatal so it can't burn
+every retry. Calls are priced at Google's PAID rates on purpose — the free tier
+bills $0, but a $0 price would make the budget cap and /ops meaningless.
+Option A on the public page: a "Run with real AI" toggle, 30 real-AI runs a day
+shared by all visitors (PUBLIC_REAL_RUNS_PER_DAY), counted as a count(*) of
+public_real runs inside create_run's existing per-tenant advisory lock
+(migration 010 = one partial index, nothing else). Over the cap the run quietly
+becomes a demo run and the page says so; one real-AI run at a time (429 +
+Retry-After, nothing created) because the free tier fits one. Visitor real-AI
+runs get the real model with the FAKE tools, so no stranger picks a URL this
+server fetches. 251 tests pass (43 new), all $0 and offline.

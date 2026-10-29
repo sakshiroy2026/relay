@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     # key whose tenant is live (paid), so a misconfiguration can't publish spending.
     public_demo_key: str | None = None
     # ── LLM (Day 4) ─────────────────────────────────────────────
-    llm_provider: Literal["fake", "anthropic"] = "fake"
+    llm_provider: Literal["fake", "anthropic", "gemini"] = "fake"
     model_planner: str = "fake-planner"
     model_cheap: str = "fake-cheap"
     tools_provider: Literal["fake", "real"] = "fake"
@@ -33,7 +33,21 @@ class Settings(BaseSettings):
     llm_max_tokens: int = 8000  # per reply, thinking included; a final record is ~1k
     llm_timeout_seconds: float = 60.0  # keep LEASE_SECONDS well above this in deployment
     llm_prompt_cache: bool = True  # P3: cache the stable prefix (system + tools + history)
-    live_run_budget_usd: float = 0.05  # per live run; a Haiku run is ~$0.006, so ~8x headroom
+    # Per real-model run (`live` and `public_real`). Priced at Gemini 3.5
+    # Flash-Lite's PAID rates a 15-turn run comes to ~$0.10-0.15, so 0.25 is
+    # ~2x headroom; on the free tier the real bill is $0 either way.
+    live_run_budget_usd: float = 0.25
+    # ── Real model, free tier (P7: Gemini) ──────────────────────
+    # The key is read from GEMINI_API_KEY by the adapter and sent as a header;
+    # like the Anthropic key it never passes through Settings, so it cannot end
+    # up in a log of the settings object.
+    gemini_model: str = "gemini-3.5-flash-lite"  # a current stable Flash-Lite, on the free tier
+    gemini_max_output_tokens: int = (
+        16000  # Gemini counts thinking inside this limit, so it sits above llm_max_tokens
+    )
+    # Option A: how many real-AI runs ALL public visitors share per day. Counted
+    # in Postgres, so the cap holds across workers and restarts. 0 = off.
+    public_real_runs_per_day: int = 30
     # ── P5: a stronger model as a last resort (real provider only; "" = off) ─
     escalation_model: str = "claude-sonnet-5-5"  # repair rung 3: one try after Haiku's re-ask fails
     fallback_model: str = "claude-sonnet-5-5"  # when the primary is still down after its retries
