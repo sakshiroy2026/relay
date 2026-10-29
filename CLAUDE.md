@@ -56,7 +56,8 @@ get the real model with the **fake** tools — never let a stranger choose a URL
 this server fetches, and note that a canned-tools run gets `CANNED_TOOLS_NOTE`
 appended to its system prompt (without it a real model searches six times for
 nothing; `live` runs keep P1's exact prompt bytes). 254 tests, all $0 and
-offline. Five real runs verified it, one of them killed mid-run and resumed —
+offline. Five real runs verified it locally, one of them killed mid-run and
+resumed, and one more on Render (`b0a3aea7`, killed and resumed there too) —
 run ids and what was *not* checked: `learn/P7_GEMINI.md` §9.
 
 **Money, restated for the free tier:** never enable billing on the Google

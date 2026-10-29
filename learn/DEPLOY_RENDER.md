@@ -45,12 +45,10 @@ locally with exactly those limits before any sign-up:
 
 - URL: https://relay-sakshi.onrender.com (service `relay-sakshi`, Singapore,
   Free plan, Dockerfile `./deploy/single/Dockerfile`, health check `/healthz`).
-- **Branch: check it.** The service was created on `deploy-render`. That branch
-  still exists and, as of 29 Oct, points at the same commit as `main`
-  (`36605ba`) — so the live site looks correct while being one merge behind
-  everything that lands on `main` from now on. Either point Render's
-  *Settings → Build & Deploy → Branch* at **`main`** (preferred: that is where
-  PRs merge), or remember to merge into `deploy-render` too, every time.
+- **Branch: `main`.** Render builds `main`, so merging a PR is a deploy. The
+  old `deploy-render` branch was deleted on 29 Oct (it was at `36605ba`, with
+  nothing that wasn't already in `main`). The proof: the site serves P7
+  (`/demo-config` has `real_ai`), and P7 only ever landed on `main`.
 - First deploy of `bc1a26a`: `/healthz` and `/readyz` OK, `/demo-config`
   offers the demo key, `/` and `/ops` return 200.
 - Public end-to-end run `b6e803fc` (anthropic.com, demo key fetched from
