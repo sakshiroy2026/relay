@@ -364,8 +364,17 @@ fairly cite a page they only saw as a search result.
 Checked: `tests/test_unread_sources.py` (9 tests, no real calls), and by eye on a local server with
 hand-written runs for three cases: source never opened, source opened, and a demo run with no label.
 
-Not checked: the label on a real run on Render, and `gemini-3.8-flash` on Render (this run never
-needed it, so that path has still only run locally, with forced failures).
+Then on a real run on Render (30 Oct, Neon): `34d9af78` stripe.com, no kill, succeeded (5 calls,
+$0.0038, `attempt_count` 1). The model asked for `https://stripe.com/about`, the canned fetch answered
+404, and the record still listed that page, gave its fields 0.99 and flagged nothing. `unread_sources`
+named the page, and the page showed the "real AI" pill and the yellow box above the record.
+
+The attempt just before it failed: `a8bee82e`, same domain, ended with `model_stopped` after 3 calls
+($0.0017) and wrote no record. Its last reply was neither a tool call nor an answer. The ledger keeps
+only `'other'`, not Gemini's finish reason, so the cause is unknown. Seen once; that gives no rate.
+
+Not checked: why `a8bee82e` stopped, and `gemini-3.8-flash` on Render (these runs never needed it, so
+that path has still only run locally, with forced failures).
 
 ## 10. Interview lines
 
