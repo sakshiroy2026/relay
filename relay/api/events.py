@@ -32,7 +32,7 @@ import psycopg
 from psycopg.conninfo import conninfo_to_dict, make_conninfo
 
 from relay.api import repo
-from relay.api.routes.runs import summarize_step
+from relay.api.routes.runs import summarize_step, unread_sources
 from relay.config import settings
 
 TICK_SECONDS = 2.0
@@ -59,6 +59,8 @@ def _snapshot(tenant_id: UUID, run_id: UUID) -> tuple[dict[str, Any] | None, lis
     run = repo.get_run(tenant_id, run_id)
     if run is None:
         return None, [], ""
+    rows = repo.get_run_steps(tenant_id, run_id)
+    run["unread_sources"] = unread_sources(run, rows)
     steps = [
         {
             "step_index": r["step_index"],
@@ -67,7 +69,7 @@ def _snapshot(tenant_id: UUID, run_id: UUID) -> tuple[dict[str, Any] | None, lis
             "created_at": r["created_at"],
             "summary": summarize_step(r["kind"], r["payload"]),
         }
-        for r in repo.get_run_steps(tenant_id, run_id)
+        for r in rows
     ]
     # what "changed" means: a new step, a status flip, a takeover, or spend
     fingerprint = f"{len(steps)}|{run['status']}|{run['lease_owner']}|{run['spent_usd']}"

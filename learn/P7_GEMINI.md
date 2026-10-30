@@ -340,7 +340,32 @@ here too.
   reached in anger.
 - The Render crash went through the `/crash` endpoint the button calls, from a
   script, not a click on the page itself, so the page's own rendering of a
-  real-AI takeover was not watched.
+  real-AI takeover was not watched. `ef6ebda7` closed that on 30 Oct (below).
+
+### The page itself, and a record that overclaimed: `ef6ebda7` (30 Oct)
+
+On Render and Neon, after the P5 and eval merge (`58ebf0a`): stripe.com with the toggle on, and
+**Kill the worker** clicked on the page. `srv-db:29` stopped after step 9, `srv-db:58` took over at
+step 10 and finished: 5 model calls, $0.0039 at Google's paid rates ($0 billed), attempt 2. The page's
+banner, ledger and owner all showed it correctly.
+
+It also showed a problem no test had. Search and fetch both failed, as canned tools usually do, so
+the answer came from the model's memory. Yet the record listed `https://stripe.com/about`, a page the
+run never opened, flagged only `funding_stage`, and gave the other fields confidence of 0.8 to 1.
+`CANNED_TOOLS_NOTE` asks for the homepage and for every unsourced field to be flagged, but a prompt
+is only a request, and the schema only checks that a source is a URL.
+
+So the ledger now decides. `unread_sources()` compares a `public_real` record's sources with the
+`fetch_page` calls that succeeded, the run row carries the answer, and the page shows a "Not
+researched" label beside the record, naming those sources. The prompt and the record are unchanged:
+this labels what the model said, it doesn't edit it. `live` runs aren't checked, because they can
+fairly cite a page they only saw as a search result.
+
+Checked: `tests/test_unread_sources.py` (9 tests, no real calls), and by eye on a local server with
+hand-written runs for three cases: source never opened, source opened, and a demo run with no label.
+
+Not checked: the label on a real run on Render, and `gemini-3.8-flash` on Render (this run never
+needed it, so that path has still only run locally, with forced failures).
 
 ## 10. Interview lines
 

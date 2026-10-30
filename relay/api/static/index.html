@@ -128,6 +128,9 @@
   pre { margin: 0; font-family: var(--mono); font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
   .side .panel + .panel { margin-top: 16px; }
   .empty { color: var(--muted); font-size: 13px; }
+  .basis { margin-bottom: 12px; padding: 10px 12px; border-radius: 10px; background: var(--warn-bg);
+           color: var(--warn-ink); font-size: 13px; overflow-wrap: anywhere; }
+  .basis b { display: block; margin-bottom: 3px; }
 
   /* ── how it works ──────────────────────────────────────────────── */
   .how { margin-top: 26px; }
@@ -188,7 +191,7 @@
           <span class="sub">The same durable runtime, but a real model doing the thinking. Shared
             allowance: <span class="left" id="realaiLeft">—</span> real-AI runs left today, one at a time.
             Web search and page fetches stay canned, so a stranger's run can't make this server fetch
-            arbitrary URLs — the model reasons, and says which fields it couldn't source.</span>
+            arbitrary URLs. So the model mostly answers from memory, and its record is labelled to say so.</span>
         </span>
       </label>
       <div class="waiting" id="realaiWait"></div>
@@ -234,7 +237,7 @@
         <p class="empty" id="noSteps">Steps appear here the moment they commit.</p>
       </section>
       <aside class="side">
-        <section class="panel"><h2>Final record</h2><pre id="final" class="empty">—</pre></section>
+        <section class="panel"><h2>Final record</h2><div class="basis" id="basis" hidden></div><pre id="final" class="empty">—</pre></section>
         <section class="panel"><h2>Saved company row</h2><pre id="company" class="empty">—</pre></section>
       </aside>
     </div>
@@ -399,6 +402,7 @@ function reset(id, mode) {
   $("noSteps").hidden = false;
   $("banner").style.display = "none"; $("banner").replaceChildren();
   $("final").textContent = "—"; $("final").className = "empty";
+  $("basis").hidden = true; $("basis").replaceChildren();
   $("company").textContent = "—"; $("company").className = "empty";
   $("runSection").hidden = false;
   $("runSection").scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -533,6 +537,24 @@ function renderRun(run) {
   if (run.result && $("final").className === "empty") {
     $("final").textContent = JSON.stringify(run.result, null, 2); $("final").className = "";
   }
+  renderBasis(run, mode);
+}
+
+// A real-AI run's tools are canned, so its record isn't research. Say so beside
+// the record, and name any listed source the ledger shows it never opened.
+function renderBasis(run, mode) {
+  if (!run.result || mode !== "public_real") return;
+  const unread = run.unread_sources || [];
+  const head = document.createElement("b");
+  head.textContent = unread.length
+    ? "Not researched: treat this as the model's memory, not verified facts."
+    : "Not researched on the live web.";
+  const why = unread.length
+    ? "Real-AI runs here use canned tools, so nothing was looked up on the live web. " +
+      `Listed as a source but never opened in this run: ${unread.join(", ")}. `
+    : "Real-AI runs here use canned tools, so this comes from the demo's fixed pages. ";
+  $("basis").replaceChildren(head, why + "The confidence scores are the model's own estimates.");
+  $("basis").hidden = false;
 }
 
 function renderSteps(steps) {

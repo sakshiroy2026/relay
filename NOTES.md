@@ -444,3 +444,12 @@ This rule was written after seeing the score, so it isn't a blind measurement, a
 sets of verdicts. Two "same" verdicts look generous (OpenAI, Atlassian: the answer is broader than the
 label), and Vokal against Agsure is inconsistent. They weren't corrected by hand; without those two it's
 0.81. No negative controls were run. Floors moved to 0.78; the 0.85 placeholder still isn't met.
+
+## Real-AI records labelled as not researched (30 Oct)
+See learn/P7_GEMINI.md section 9.
+
+Run `ef6ebda7` on Render, killed from the page's own button, resumed at step 10 and finished, and the
+page showed it correctly. Its record listed a page the run never opened, and flagged only one field.
+The ledger now settles that: `unread_sources()` names the sources a `public_real` run never opened,
+and the page labels the record "Not researched". No new dependency, no prompt change, no real calls
+to build it. Not checked: the label on a real run on Render.

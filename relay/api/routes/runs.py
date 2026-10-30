@@ -1,3 +1,17 @@
+"""The /v1 run routes: create a run, read it, watch it, and the demo's kill button.
+
+WHAT IT IS  The HTTP face of the runs table. All SQL lives in relay/api/repo.py;
+            this file checks the request, calls the repo and shapes the reply.
+GOES IN     An authenticated, rate-limited Principal, plus the route's own
+            arguments (a domain, a run id, an optional Idempotency-Key).
+COMES OUT   JSON. A run row also carries `unread_sources`: the sources a public
+            real-AI record lists that the run never opened. Ledger rows come
+            back as one-line summaries, never full page texts.
+TOUCHES     Postgres, through repo only. Nothing here calls a model or a tool.
+FAILS WHEN  A bad Idempotency-Key -> 400, a run from another tenant -> 404, a
+            real_ai request from a live tenant -> 409, over a limit -> 429.
+"""
+
 import json
 from typing import Annotated, Any
 from uuid import UUID
@@ -157,7 +171,40 @@ def get_run(run_id: UUID, principal: Caller) -> dict:
     row = repo.get_run(principal.tenant_id, run_id)
     if row is None:
         raise HTTPException(status_code=404, detail="run not found")
+    rows = repo.get_run_steps(principal.tenant_id, run_id) if row["result"] else []
+    row["unread_sources"] = unread_sources(row, rows)
     return row
+
+
+def unread_sources(run: dict[str, Any], rows: list[dict[str, Any]]) -> list[str]:
+    """The sources a public real-AI record lists that this run never opened.
+
+    Those runs get canned tools, so the model can answer from memory and still
+    name a page it never read. The schema only checks that a source is a URL, so
+    the ledger is the proof. The page shows these beside the record. Empty for
+    other modes: a `live` run can fairly cite a page it only saw as a search result.
+    """
+    result = run.get("result")
+    if not result or (run.get("input") or {}).get("mode") != "public_real":
+        return []
+    asked = {
+        r["payload"].get("tool_call_id"): r["payload"].get("args", {}).get("url", "")
+        for r in rows
+        if r["kind"] == "tool_call" and r["payload"].get("tool") == "fetch_page"
+    }
+    opened = {
+        _same_page(asked[r["payload"]["tool_call_id"]])
+        for r in rows
+        if r["kind"] == "tool_result"
+        and r["payload"].get("ok")
+        and r["payload"].get("tool_call_id") in asked
+    }
+    return [s for s in result.get("sources", []) if _same_page(s) not in opened]
+
+
+def _same_page(url: str) -> str:
+    """`https://a.com` and `https://a.com/` are one page: validation adds the slash."""
+    return url.rstrip("/").lower()
 
 
 # ── read-only ledger view for the demo page ───────────────────────────────

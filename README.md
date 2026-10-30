@@ -80,7 +80,11 @@ $0.004811). The takeover is the one that matters: Gemini validates a replayed
 had been retyped would have been rejected, not resumed. **Then on Render**
 (Neon, same day): `b0a3aea7` razorpay.com, a visitor-style `real_ai` run
 killed through the demo's `/crash` endpoint; worker `…:29` took over at step
-10 and finished (4 calls, $0.003168, `attempt_count` 2, record clean). The
+10 and finished (4 calls, $0.003168, `attempt_count` 2, record clean). `ef6ebda7` stripe.com (30 Oct, Render and Neon, after the P5 and eval merge) was
+killed with a click on the page's own button: worker `…:58` took over at step 10 and finished
+(5 calls, $0.0039, `attempt_count` 2), and the page showed the takeover correctly. Its record
+listed `https://stripe.com/about` as a source, a page the run never opened, so real-AI records now
+carry a "Not researched" label naming any such source (checked locally with hand-written runs). The
 first `live`-mode runs came later, with the eval above —
 [`learn/P7_GEMINI.md`](learn/P7_GEMINI.md) §9 lists what was and wasn't checked.
 
