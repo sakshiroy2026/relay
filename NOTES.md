@@ -458,6 +458,10 @@ and no record; the ledger doesn't keep Gemini's finish reason, so the cause is u
 `gemini-3.8-flash` hasn't passed on Render: `70daab6a` hit the free tier's daily quota (429) and got no
 model reply, so a successful run there is still unproven.
 
+![Run 34d9af78 on Render: the yellow "Not researched" box above the record](learn/img/render-label-34d9af78.jpg)
+
+![Run 70daab6a on Render: failed on attempt 2 with model_fatal, $0 spent](learn/img/render-38flash-failed-70daab6a.jpg)
+
 ## The last funding labels: Stripe, Canva, Atlassian (30 Oct)
 See learn/P6_LIVE_EVAL.md section 4.
 

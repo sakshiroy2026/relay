@@ -373,8 +373,11 @@ The attempt just before it failed: `a8bee82e`, same domain, ended with `model_st
 ($0.0017) and wrote no record. Its last reply was neither a tool call nor an answer. The ledger keeps
 only `'other'`, not Gemini's finish reason, so the cause is unknown. Seen once; that gives no rate.
 
-Proof: [`34d9af78` screenshot](img/render-label-34d9af78.jpg) and [ledger](proofs/render-34d9af78.json),
-[`a8bee82e` screenshot](img/render-failed-a8bee82e.jpg) and [ledger](proofs/render-a8bee82e.json).
+![Run 34d9af78 on Render, succeeded, real AI: the yellow "Not researched" box above the record names https://stripe.com/about](img/render-label-34d9af78.jpg)
+
+![Run a8bee82e on Render, failed, real AI: the empty final record after model_stopped](img/render-failed-a8bee82e.jpg)
+
+Ledgers: [`34d9af78`](proofs/render-34d9af78.json), [`a8bee82e`](proofs/render-a8bee82e.json).
 
 `gemini-3.8-flash` on Render was tried once, and it did not pass. `70daab6a` (stripe.com, no kill,
 `GEMINI_MODEL` set to 3.8 Flash, 30 Oct) ended with `model_fatal` about 82 s after it started: no
@@ -383,9 +386,13 @@ ledger can't say whether that was the 15 s lease running out or a redeploy. The 
 tier: the error step reads "model daily quota exhausted (429: RESOURCE_EXHAUSTED ...". The adapter
 treated it as fatal on purpose, so the run ended honestly instead of retrying. That text is cut at
 300 characters, before it names the metric or the model, so the limit itself isn't known. Flash-Lite
-had answered on Render 8 minutes earlier (`34d9af78`). Proof:
-[running](img/render-38flash-running-70daab6a.jpg), [failed](img/render-38flash-failed-70daab6a.jpg),
-[ledger](proofs/render-70daab6a.json), [error text](proofs/render-70daab6a-error.json).
+had answered on Render 8 minutes earlier (`34d9af78`).
+
+![Run 70daab6a on Render while running: worker 30 on attempt 1, nothing spent yet](img/render-38flash-running-70daab6a.jpg)
+
+![Run 70daab6a on Render after it failed: attempt 2, worker 29, error model_fatal, $0 spent](img/render-38flash-failed-70daab6a.jpg)
+
+Ledger: [`70daab6a`](proofs/render-70daab6a.json), and its [error text](proofs/render-70daab6a-error.json).
 
 Not checked: why `a8bee82e` stopped, which worker event caused the takeover in `70daab6a`, and any
 successful `gemini-3.8-flash` run on Render. A 429 shows the request reached Google, not that the
