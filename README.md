@@ -14,6 +14,10 @@ Instead of an agent loop living in a process that dies when the process dies, ev
 
 *The `/ops` page over this repo's own test history — 4,300+ runs of chaos/fencing/repair harnesses: 145 crash-resumes, the repair ladder's rungs, and `effects committed twice: 0`. Every number is aggregated from the `steps` table at request time; the same data ships as Prometheus metrics at `/metrics`.*
 
+![Real-AI run 34d9af78 on Render: the "Not researched" box above the record names a source the run never opened](learn/img/render-label-34d9af78.jpg)
+
+*A real-AI run on Render, `34d9af78` (Gemini Flash-Lite, canned tools): the page labels the record "Not researched" and names the source the run never opened. The runs that failed are in [`learn/P7_GEMINI.md`](learn/P7_GEMINI.md) §9, with screenshots and ledgers.*
+
 ---
 
 ## Status
@@ -84,9 +88,11 @@ killed through the demo's `/crash` endpoint; worker `…:29` took over at step
 killed with a click on the page's own button: worker `…:58` took over at step 10 and finished
 (5 calls, $0.0039, `attempt_count` 2), and the page showed the takeover correctly. Its record
 listed `https://stripe.com/about` as a source, a page the run never opened, so real-AI records now
-carry a "Not researched" label naming any such source (checked locally with hand-written runs). The
+carry a "Not researched" label naming any such source (checked locally with hand-written runs, then
+on a real run on Render, `34d9af78`). The
 first `live`-mode runs came later, with the eval above —
-[`learn/P7_GEMINI.md`](learn/P7_GEMINI.md) §9 lists what was and wasn't checked.
+[`learn/P7_GEMINI.md`](learn/P7_GEMINI.md) §9 lists what was and wasn't checked, including two failed
+Render runs, with screenshots and ledgers.
 
 `python -m chaos.crash_test --n 200`: each iteration starts a run, waits a random 0–10 s, runs `docker kill` on the container that owns the run, waits for the run to finish, and checks its ledger. The runs go one at a time.
 
