@@ -1,5 +1,5 @@
 {
-  "_comment": "A little under the first live eval (30 Oct 2026: accuracy and precision 0.83 with the clearer judge rule, 20 labels), to catch regressions. The earlier placeholder of 0.85 precision is not met: see learn/P6_LIVE_EVAL.md. Sakshi can raise these.",
+  "_comment": "A little under the first live eval (30 Oct 2026: accuracy and precision 0.83 with the clearer judge rule, 20 labels), to catch regressions. The earlier placeholder of 0.85 precision is not met: see learn/P6_LIVE_EVAL.md. The owner can raise these.",
   "min_labels": 20,
   "min_precision": 0.78,
   "min_accuracy": 0.78

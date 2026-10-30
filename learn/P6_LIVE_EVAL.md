@@ -140,7 +140,7 @@ This sorting is a judgement call from the outputs alone, not a verified re-check
 - 20 companies is a small set, and most came from one person's search: treat these as a first
   reading, not a precise rate.
 
-## 11. Questions for Sakshi Roy
+## 11. Questions to answer yourself
 
 1. The score went from 0.75 to 0.83 without the agent changing. What changed, and how do you say that
    honestly?

@@ -85,9 +85,9 @@ multiply the bill.
 
 180 tests pass. Not yet proven against the real API: P5's paid check
 (~5 runs, ~$0.20) can force rung 3 with a domain the model can't settle, after
-Sakshi's go.
+the owner's go.
 
-## 7. Questions for Sakshi Roy
+## 7. Questions to answer yourself
 
 1. Why is affordability checked with a *pessimistic* estimate, and before the call?
 2. Why is escalation sticky for a run, but the fallback isn't?

@@ -3,7 +3,7 @@
 ## 1. The picture
 
 The Oracle plan (learn/DEPLOY.md) needed a credit card for identity
-verification; Sakshi doesn't have one, so Relay runs on Render's free plan
+verification; the owner doesn't have one, so Relay runs on Render's free plan
 instead: **one container** holding the API and the workers, built by Render
 from the GitHub repo, with Neon as the database exactly as before. HTTPS and
 the public URL come from Render, so Caddy and DuckDNS fall away.

@@ -66,7 +66,7 @@ tenant's run gets `event: gone`, matching the 404 story.
   notification through the pooler — and passes since `listen_conninfo`.
   Full suite on Neon: 117 passed.
 
-## 6. Questions for Sakshi Roy
+## 6. Questions to answer yourself
 
 1. Why does the event carry state *re-read from the database* instead of the
    new step that rang the bell?

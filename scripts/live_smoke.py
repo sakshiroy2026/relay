@@ -44,7 +44,7 @@ from relay.llm.pricing import estimate
 from scripts.check_run import check_run
 
 RESULTS = Path(__file__).parent.parent / "chaos" / "live_smoke_results.json"
-# ~40k input + 4k output per run (CLAUDE.md). Priced from the model the live
+# ~40k input + 4k output per run. Priced from the model the live
 # mode actually uses, so the estimate follows the provider instead of a comment.
 EST_TOKENS = (40_000, 4_000)
 # Which key each provider needs, and whether using it costs money.

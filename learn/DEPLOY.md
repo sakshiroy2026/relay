@@ -27,7 +27,7 @@ differ slightly.
 | Thing | Where | Notes |
 |---|---|---|
 | Oracle Cloud account | oracle.com/cloud/free | asks for a card to verify identity; Always Free resources aren't charged. Pick a home region near you (it can't be changed later) |
-| A free subdomain | duckdns.org | sign in, create e.g. `relay-sakshi` → `relay-sakshi.duckdns.org` |
+| A free subdomain | duckdns.org | sign in, create e.g. `relay-demo` → `relay-demo.duckdns.org` |
 | Neon | you already have it | the same database: the migrations below bring it up to date |
 | (later, optional) keys | console.anthropic.com, tavily.com | only for your private live tenant |
 
@@ -69,7 +69,7 @@ git clone https://github.com/sakshiroy2026/relay.git && cd relay
 cp .env.example .env && nano .env && chmod 600 .env
 ```
 Fill in `DATABASE_URL` (your Neon string), `DEV_TENANT_ID`, `RELAY_DOMAIN`
-(`relay-sakshi.duckdns.org`). Leave `ANTHROPIC_API_KEY` **empty** for now: the
+(`relay-demo.duckdns.org`). Leave `ANTHROPIC_API_KEY` **empty** for now: the
 server then cannot spend money at all.
 
 **7. Build, migrate, start:**
@@ -90,10 +90,10 @@ Copy the printed `RELAY_API_KEY=rly_...` value into `.env` as `PUBLIC_DEMO_KEY=`
 key to visitors. The API refuses to offer it if that tenant is ever switched to `live`.
 
 **9. Check it:**
-- `https://relay-sakshi.duckdns.org/healthz` → `{"status":"ok"}` (the padlock means
+- `https://relay-demo.duckdns.org/healthz` → `{"status":"ok"}` (the padlock means
   Caddy got the certificate; the first time can take a minute)
-- `https://relay-sakshi.duckdns.org/` → start a run with no key of your own
-- `https://relay-sakshi.duckdns.org/ops` → the dashboard
+- `https://relay-demo.duckdns.org/` → start a run with no key of your own
+- `https://relay-demo.duckdns.org/ops` → the dashboard
 - the kill-and-resume demo, on the server: `docker ps` (find a worker), start a run, then
   `docker kill <that worker's container>` and watch the page's takeover banner. Bring the
   killed worker back with `docker compose -f docker-compose.prod.yml up -d` (whether Docker
@@ -126,7 +126,7 @@ refuse to offer it anyway).
 | workers log "preflight: ANTHROPIC_API_KEY not set" | expected while the server is $0-only | nothing to do; demo runs don't need it |
 | "out of capacity" creating the VM | free ARM capacity is busy in that region | another availability domain, or retry later |
 
-## 6. Questions for Sakshi Roy
+## 6. Questions to answer yourself
 
 1. Why can't a visitor of the public page spend your Anthropic credits?
 2. Why does killing a worker on the server not break the demo?

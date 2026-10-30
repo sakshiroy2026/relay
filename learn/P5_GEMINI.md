@@ -110,7 +110,7 @@ in the probes). The retries are what got these runs through.
 **After the merge:** a public real-AI run that fails validation twice can now call 3.8
 Flash. It's free tier and budget-capped, but it uses the same Google quota.
 
-## 7. Questions for Sakshi Roy
+## 7. Questions to answer yourself
 
 1. Why does `escalation_model()` return `""` for a Claude id on a Gemini run, instead
    of raising an error?

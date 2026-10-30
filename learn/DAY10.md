@@ -86,7 +86,7 @@ per-tenant: other tenants don't queue behind it.
   (bcrypt) then `202 0.007s` (cache); env key still 202 as the dev tenant; the
   new tenant gets **404** for the dev tenant's run id.
 
-## 7. Questions for Sakshi Roy
+## 7. Questions to answer yourself
 
 1. Why does the key have a *prefix* at all — why not look up by the hash of the
    whole key?

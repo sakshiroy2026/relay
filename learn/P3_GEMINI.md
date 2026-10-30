@@ -71,7 +71,7 @@ turns used different levels.
 - The `low` level with real tools. The eval ran at the default: $0.0079 a run.
 - Five runs a level is a small sample: enough to show the size of the gap, not a precise rate.
 
-## 8. Questions for Sakshi Roy
+## 8. Questions to answer yourself
 
 1. Why didn't the cheaper setting become the default?
 2. Why is the saving mostly in output tokens?

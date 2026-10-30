@@ -125,7 +125,7 @@ owner was `kill -9`'d on all 5 claims → the reaper marked all 5 `dead`
 succeeded** with clean ledgers — some of those final ledgers carry 3 workers'
 ids and both markers, and `check_run` accepts them.
 
-## 8. Questions for Sakshi Roy
+## 8. Questions to answer yourself
 
 1. Why is a 503 retried *inside* a step (invisible to the transcript) while a
    validation failure becomes a real ledger row and conversation turn?

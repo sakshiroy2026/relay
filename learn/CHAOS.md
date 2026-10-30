@@ -99,7 +99,7 @@ write tool's receipt path.
   summary: `chaos/results.json`.
 - Re-create the summary from the raw lines: `python -m chaos.crash_test --summary`.
 
-## 7. Questions for Sakshi Roy
+## 7. Questions to answer yourself
 
 1. Why is the median time to resume almost exactly the lease length?
 2. Why does the harness kill the *owner* of the run instead of a random worker?

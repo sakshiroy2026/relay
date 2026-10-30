@@ -4,7 +4,7 @@
 
 Everything Relay has measured so far is about *surviving*: crashes, zombies,
 outages. None of it says whether the company record is **correct**. That needs
-two things a machine can't invent: ground truth (Sakshi's hand-labelled golden
+two things a machine can't invent: ground truth (the owner's hand-labelled golden
 set, Day 18) and a way to score against it that is strict where facts are
 exact and careful where they aren't.
 
@@ -40,7 +40,7 @@ paid model, and the judge is tested through the real SDK with a mock transport.
 A model that guesses everything can look decent on accuracy and terrible on
 precision. A model that flags honestly keeps precision high. Relay's prompt
 asks for flagging, so the gate watches both. The floors in `thresholds.json`
-(precision 0.85, accuracy 0.6, at least 20 labels) are **placeholders**; Sakshi
+(precision 0.85, accuracy 0.6, at least 20 labels) are **placeholders**; the owner
 sets the real bar after the first live eval.
 
 ## 4. Design decisions
@@ -73,9 +73,9 @@ sets the real bar after the first live eval.
 
 **Not yet possible:** a real number. It needs the Day 18 labels, then
 `python -m evals.run_eval --mode live --yes-spend` (estimate for 50 labels: about
-$0.40 = 50 × $0.006 runs + 50 × $0.002 judge), after Sakshi's go.
+$0.40 = 50 × $0.006 runs + 50 × $0.002 judge), after the owner's go.
 
-## 6. Questions for Sakshi Roy
+## 6. Questions to answer yourself
 
 1. Why report precision *and* accuracy instead of one score?
 2. Why is a flagged field not counted as wrong?

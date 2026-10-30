@@ -9,8 +9,8 @@ the new `AnthropicLLMClient` is just another one.
 
 It was **built and tested for $0**. The tests drive the official SDK through a
 mock HTTP transport: the SDK's real serializer, headers and error classes run,
-and no request leaves the machine. The first paid run waits for Sakshi's key
-and her "go".
+and no request leaves the machine. The first paid run waits for the owner's key
+and go-ahead.
 
 The one thing that had to be designed rather than plugged in is **thinking**.
 Haiku 5.5 thinks before it answers, and its reply carries `thinking` blocks
@@ -106,9 +106,9 @@ received are the ones worker B sent back.
 
 **Not yet proven:** anything against the real API. Next session:
 `python -m scripts.live_smoke --yes-spend --runs 3` (estimate ~$0.02, hard stop
-$0.10), after Sakshi's go.
+$0.10), after the owner's go.
 
-## 7. Questions for Sakshi Roy
+## 7. Questions to answer yourself
 
 1. Why can't replay rebuild an assistant turn from its text and tool calls any more?
 2. Why is a refusal returned as a `Response` and not raised as an error?

@@ -149,7 +149,7 @@ See learn/SSRF.md. Explain-back owed.
 
 ## Day 8 — Retries, backoff, per-tool circuit breaker
 
-Built by Claude Code; see learn/DAY8.md. Explain-back owed.
+See learn/DAY8.md.
 Retries (full jitter, max 3) live INSIDE a step; breaker state is a Postgres row shared
 by all workers (migration 003). Proofs: 50/50 flaky runs succeeded (41 calls recovered
 by retry), breaker opened after 5 consecutive failures and self-closed via one probe,
@@ -158,7 +158,7 @@ kill -9 mid-retries resumed clean (run `28ca2373`). Numbers: chaos/fault_results
 
 ## Day 16 — Idempotency, fencing and throughput, measured
 
-Built by Claude Code; see learn/DAY16.md. Explain-back owed.
+See learn/DAY16.md.
 No mechanism changed; three harnesses leaned on the proven ones. A2: 500 keys
 raced by 4 processes + 200 kill -9 mid-write -> every key executed once, receipt
 and row never disagreed. A3: owner SIGSTOPped 100x -> 0 stale finishes (fenced by
@@ -171,7 +171,7 @@ check_run.py now validates ledger shape too. Numbers: chaos/*_results.json
 
 ## Day 9 — Schema repair ladder + dead-letter queue
 
-Built by Claude Code; see learn/DAY9.md. Explain-back owed.
+See learn/DAY9.md.
 Ladder: strict parse -> free JSON extraction (brace-counting, handles fences AND
 prose) -> ONE re-ask where the model sees its own validation errors as a real,
 replayable turn (new step kind repair_requested, migration 004). 75/75 repairable
@@ -187,7 +187,7 @@ Numbers: chaos/repair_dlq_results.json (local Postgres, not Neon). 20 new tests 
 
 ## Day 10 — Full API keys, tenant scoping, rate limits
 
-Built by Claude Code; see learn/DAY10.md. Explain-back owed.
+See learn/DAY10.md.
 Keys are rly_<prefix>.<secret>: indexed prefix lookup, bcrypt check, Principal
 (tenant + limits); verified keys cached 60 s as SHA-256 digests (294 ms cold ->
 7 ms cached, measured). Env key still works -> dev tenant. All API SQL moved to
@@ -199,7 +199,7 @@ vs cap 3 -> exactly 3 rows). relay/api/auth.py deleted; seed.py --tenant NAME.
 
 ## Day 17 — Observability: Prometheus, OpenTelemetry, the /ops page
 
-Built by Claude Code; see learn/DAY17.md. Explain-back owed.
+See learn/DAY17.md.
 No counters in the hot path: a custom Prometheus collector aggregates the LEDGER
 at scrape time (38 relay_* series: runs, resumes, spend, retries, breaker state,
 repair rungs, DLQ depth, and relay_write_effects_executed_twice — the one alert
@@ -213,7 +213,7 @@ prometheus-client, opentelemetry-sdk, otlp-http exporter. 5 new tests (104).
 
 ## Day 11 — SSE: the ledger pushed, not polled
 
-Built by Claude Code; see learn/DAY11.md. Explain-back owed.
+See learn/DAY11.md.
 Migration 006: AFTER INSERT ON steps -> pg_notify (fires on COMMIT: a fenced
 zombie's rolled-back insert rings nothing). GET /v1/runs/{id}/events holds one
 LISTEN connection and on each bell RE-READS run+steps via the tenant-scoped repo
@@ -226,7 +226,7 @@ parsed event (vs ~500 ms avg at 1 s polling); Playwright browser run clean.
 
 ## Client Idempotency-Key (the first idempotency layer)
 
-Built by Claude Code; see learn/IDEMPOTENCY_KEY.md. Explain-back owed.
+See learn/IDEMPOTENCY_KEY.md.
 Migration 007: idempotency_keys (tenant_id, key) -> run_id + body sha256. The key
 row commits with the run and step 0; the Day 10 per-tenant advisory lock already
 serialises racing retries. Same key + same body -> same run, header
@@ -236,7 +236,7 @@ Start. Live: run 4f186a0d replayed, 1 row. 7 new tests (116 total).
 
 ## Real tools (P2): Tavily search + pinned-IP fetcher
 
-Built by Claude Code; see learn/REAL_TOOLS.md. Explain-back owed.
+See learn/REAL_TOOLS.md.
 TOOLS_PROVIDER=real swaps in tavily_search + fetch_page under the SAME names and
 schemas (same model menu, same cache prefix); refuses to boot without
 TAVILY_API_KEY. Stdlib only, no new deps. fetch_page connects to the IP
@@ -251,7 +251,7 @@ from the container). The pinned fetcher bypasses HTTP proxies by design.
 
 ## P1 — Real model adapter (built for $0, paid proof pending)
 
-Built by Claude Code; see learn/P1_REAL_MODEL.md. Explain-back owed.
+See learn/P1_REAL_MODEL.md.
 relay/llm/anthropic_client.py behind the same LLMClient protocol (official SDK
 2.x, SDK retries off). Haiku 5.5 thinks, and a thinking signature is only valid
 in a byte-identical conversation, so model_call rows store the raw reply blocks
@@ -265,7 +265,7 @@ New dep: anthropic. 25 new tests (173 total).
 
 ## P5 — Repair rung 3 + model fallback (built for $0)
 
-Built by Claude Code; see learn/P5_ESCALATION.md. Explain-back owed.
+See learn/P5_ESCALATION.md.
 Sonnet 5.5 only as a last resort: rung 3 after Haiku's answer AND its re-ask
 fail (a repair_requested row with escalate_to; sticky, replay remembers it), or
 a per-turn fallback when Haiku is still down after 3 retries (model_call records
@@ -276,7 +276,7 @@ twice". 7 new tests (180 total).
 
 ## P6 — Eval harness + CI (built for $0)
 
-Built by Claude Code; see learn/P6_EVAL.md. Explain-back owed.
+See learn/P6_EVAL.md.
 evals/: deterministic field scoring (strict normalization; null label =
 unknowable, a value there = wrong; flagged = abstained), a narrow Sonnet 5.5
 judge for industry only (json_schema verdict), accuracy AND precision, run_eval
@@ -287,7 +287,7 @@ tests on Postgres 16, gate; no secrets. 16 new tests (196 total).
 
 ## Deployment config (Oracle Cloud Always Free) + public demo key
 
-Built by Claude Code; see learn/DEPLOY.md. Explain-back owed.
+See learn/DEPLOY.md.
 docker-compose.prod.yml (Caddy HTTPS + API + 3 workers, restart unless-stopped,
 Neon stays the DB), deploy/Caddyfile (flush_interval -1 for SSE), Dockerfile now
 ships alembic + scripts, .env.example. /demo-config offers PUBLIC_DEMO_KEY to
@@ -298,13 +298,13 @@ NOT YET BUILT: no Docker in the dev container; the first build is on the server.
 
 ## Days 8–17 checked on Neon + Docker (28 Oct)
 
-Checked by Claude Code on the Windows host; see the README "Verified so far" entry (runs `fd340fcd`, `237c86e0`).
+Checked on the Windows host; see the README "Verified so far" entry (runs `fd340fcd`, `237c86e0`).
 Fixes found: SSE's LISTEN skips Neon's pooler (learn/DAY11.md); the fencing harness refuses to run on Windows
 (no SIGSTOP), the repair/DLQ harness kills with `proc.kill()` so it works there too. Explain-back owed.
 
 ## Deploy target change: Render free plan (29 Oct)
 
-Built by Claude Code; see learn/DEPLOY_RENDER.md. Explain-back owed.
+See learn/DEPLOY_RENDER.md.
 Oracle needed a credit card for sign-up; none available, so the public demo
 goes to Render's free plan: deploy/single/ = one container (API + 2 workers,
 start.sh restart loop), Neon unchanged, HTTPS/URL from Render, Caddy/DuckDNS
@@ -313,7 +313,7 @@ steady, demo run in ~12 s. The Oracle/VM files stay for a future real server.
 
 ## Demo page v2 + the "Kill the worker" button (29 Oct)
 
-Built by Claude Code; see learn/CRASH_BUTTON.md. Explain-back owed.
+See learn/CRASH_BUTTON.md.
 The page is now a recruiter-facing showcase (hero with the measured chaos
 numbers, example domains, a three-card explainer), and any visitor can crash
 the owning worker from the page: POST /v1/runs/{id}/crash (migration 009,
@@ -325,7 +325,7 @@ FAKE_DELAY_SECONDS=2.5 — at 0.5 s a run finished in ~7 s, too fast to click.
 
 ## P7: a real model on Gemini's free tier + a public "real AI" toggle (29 Oct)
 
-Built by Claude Code; see learn/P7_GEMINI.md. Explain-back owed.
+See learn/P7_GEMINI.md.
 The Anthropic key never arrived, so the real model is now Google Gemini on the
 FREE tier (no card, no billing): relay/llm/gemini_client.py, raw httpx2 on
 generateContent, key in the x-goog-api-key header. GEMINI_MODEL defaults to
@@ -363,7 +363,7 @@ a worker sleeping mid-call holds a lease it isn't using. Headline proof: run
 only works because the replayed thoughtSignatures were accepted.
 
 ## P5 and the eval judge on Gemini (30 Oct)
-Built by Claude Code; see learn/P5_GEMINI.md. Explain-back owed.
+See learn/P5_GEMINI.md.
 
 Gemini runs had no rung 3 and no fallback, because both named Claude models. Each
 provider now has its own pair (Gemini: 3.5 Flash-Lite -> 3.8 Flash), and the factory
@@ -392,7 +392,7 @@ Not verified: a failure the model made by itself, a real outage, kill -9 of a re
 worker on this path, Render or Neon, real tools, the judge in a full eval run.
 
 ## P3 on Gemini: thinking level and caching, measured (30 Oct)
-Built by Claude Code; see learn/P3_GEMINI.md. Explain-back owed.
+See learn/P3_GEMINI.md.
 
 GEMINI_THINKING_LEVEL is opt-in and off by default, so P7's request bytes don't change.
 Measured with live_smoke --mode public_real (real model, fake tools, local Postgres, free
@@ -406,19 +406,19 @@ the exact cause of the stall wasn't pinned down. No real calls were made during 
 the ledger). Clear open rows before running a harness on that database.
 
 ## P2: the first real search and fetch (30 Oct)
-Checked by Claude Code; see the end of learn/REAL_TOOLS.md.
+See the end of learn/REAL_TOOLS.md.
 
 One Tavily search and one page fetch from the Windows laptop, using the real functions. The
 format written from memory was correct and the pinned fetcher works with real TLS, so nothing
 changed. Not verified: a full live-mode run. The eval will be the first.
 
 ## The first live eval: real accuracy numbers (30 Oct)
-Built by Claude Code; see learn/P6_LIVE_EVAL.md. Explain-back owed.
+See learn/P6_LIVE_EVAL.md.
 
 20 companies labelled by hand. Twelve rows were lost from the workbook and rebuilt from screenshots;
-fields in doubt stayed out of scoring until Sakshi answered, and 3 still are. Result (local Postgres,
+fields in doubt stayed out of scoring until the owner answered, and 3 still are. Result (local Postgres,
 free tier, $0): 87/116 = 0.75, and 81/96 = 0.84 without industry. Industry's 0.30 mostly reflects a
-strict judge and broad labels. It was left as measured, and changing the rule is her decision.
+strict judge and broad labels. It was left as measured, and changing the rule is the owner's decision.
 
 Requests: 170 Gemini (151 model + 19 judge) including the 7-request CRED rerun. The main run's 163 went
 past both my 100-140 estimate and the 160 stop by 3, because the cap is only checked between runs.
@@ -433,9 +433,9 @@ command didn't stop on failure; fixed in b252ea0, and commits are now gated on t
 No new dependency. Floors moved to 0.7 / 0.7; the 0.85 precision placeholder isn't met.
 
 ## Industry re-judged with a clearer rule (30 Oct)
-Built by Claude Code; see learn/P6_LIVE_EVAL.md section 5. Explain-back owed.
+See learn/P6_LIVE_EVAL.md section 5.
 
-Sakshi's decision, after seeing the misses. The first rule failed answers that plainly fit ("Financial
+The owner's decision, after seeing the misses. The first rule failed answers that plainly fit ("Financial
 Services / Software" against "Financial Services"). The new rule counts a more specific part of the label
 as the same. Same model, same saved answers, 18 requests, no agent runs. Industry went from 6/20 to 15/20,
 overall from 0.75 to 0.83. Without industry it's still 0.84, because no judge touches those fields.

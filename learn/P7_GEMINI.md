@@ -168,7 +168,7 @@ adapter against `httpx2.MockTransport`.
 **The real check** — 5 real runs on the free tier, $0 — is in §9, including the
 two things it found that the tests could not.
 
-## 8. Questions for Sakshi Roy
+## 8. Questions to answer yourself
 
 1. A visitor's real-AI run gets the real model but canned search results. Is
    that still an honest demo, or does the page need to say it louder?
