@@ -1,9 +1,10 @@
 """save_company under racing callers and a dead writer, against a real database.
 
 The receipt book (relay/core/idempotency.py) is only interesting under
-concurrency, so these tests make callers overlap on purpose: each write sleeps
-inside its transaction first, which guarantees every racer gets past the
-receipt check before anyone commits.
+concurrency, so these tests make callers overlap on purpose: each write waits
+inside its transaction until every racer has arrived, which guarantees they all
+get past the receipt check before anyone commits. (A fixed sleep did not: under
+load one racer could arrive after another had committed, and never write at all.)
 """
 
 import json
@@ -19,6 +20,7 @@ from relay.agent.fake_script import ENRICH_SCRIPT
 from relay.agent.tools import ToolContext, dispatch_tool
 
 RECORD = ENRICH_SCRIPT[2].tool_calls[0].args  # the fake model's save_company args
+RACERS = 4  # the pool has 5 connections
 
 
 def receipt(key: str) -> dict[str, Any]:
@@ -43,14 +45,15 @@ def company_rows(domain: str) -> int:
 
 @pytest.fixture
 def widened(monkeypatch: pytest.MonkeyPatch) -> list[int]:
-    """Make every save_company write sleep 50 ms inside its transaction; count the writes."""
+    """Hold every save_company write inside its transaction until all racers are there."""
     real = tools_mod.run_once
     started: list[int] = []
+    all_here = threading.Barrier(RACERS)
 
     def counting(key: str, run_id: Any, idx: int, name: str, execute: Any) -> Any:
         def wrapped(cur: psycopg.Cursor[Any]) -> dict[str, Any]:
             started.append(1)
-            cur.execute("SELECT pg_sleep(0.05)")
+            all_here.wait(timeout=20)
             result: dict[str, Any] = execute(cur)
             return result
 
@@ -63,8 +66,7 @@ def widened(monkeypatch: pytest.MonkeyPatch) -> list[int]:
 def test_racing_callers_execute_once(parked_run: tuple[uuid.UUID, str], widened: list[int]) -> None:
     run_id, domain = parked_run
     ctx = ToolContext(run_id=run_id, domain=domain, step_index=1, idem_key=f"{run_id}:race")
-    racers = 4  # the pool has 5 connections
-    barrier = threading.Barrier(racers)
+    barrier = threading.Barrier(RACERS)
     answers: list[dict[str, Any]] = []
 
     def race() -> None:
@@ -73,17 +75,17 @@ def test_racing_callers_execute_once(parked_run: tuple[uuid.UUID, str], widened:
         assert out.ok, out.content
         answers.append(json.loads(out.content))
 
-    threads = [threading.Thread(target=race) for _ in range(racers)]
+    threads = [threading.Thread(target=race) for _ in range(RACERS)]
     for t in threads:
         t.start()
     for t in threads:
         t.join(timeout=30)
 
-    assert len(answers) == racers
+    assert len(answers) == RACERS
     assert all(a == answers[0] for a in answers)  # everyone is told the same thing
-    assert receipt(ctx.idem_key) == {"status": "ok", "attempts": racers, "executions": 1}
+    assert receipt(ctx.idem_key) == {"status": "ok", "attempts": RACERS, "executions": 1}
     assert company_rows(domain) == 1
-    assert len(widened) == racers  # all 4 really wrote; 3 were rolled back by the receipt
+    assert len(widened) == RACERS  # all 4 really wrote; 3 were rolled back by the receipt
 
 
 def test_writer_killed_mid_transaction_leaves_nothing(parked_run: tuple[uuid.UUID, str]) -> None:

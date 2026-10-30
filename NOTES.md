@@ -361,3 +361,86 @@ Retry-After, nothing created), because waiting is free while nothing exists and
 a worker sleeping mid-call holds a lease it isn't using. Headline proof: run
 39d7666b, killed at step 3, resumed by vm:3180 at step 4, finished clean — which
 only works because the replayed thoughtSignatures were accepted.
+
+## P5 and the eval judge on Gemini (30 Oct)
+Built by Claude Code; see learn/P5_GEMINI.md. Explain-back owed.
+
+Gemini runs had no rung 3 and no fallback, because both named Claude models. Each
+provider now has its own pair (Gemini: 3.5 Flash-Lite -> 3.8 Flash), and the factory
+drops an id from the other family. The eval judge moved from the Anthropic SDK to
+Gemini through the adapter's generate(), so it shares key handling, errors and retries.
+No new dependency.
+
+The real check (30 Oct, free tier, $0, 35 requests, local Postgres). Two probes (9
+requests): 3.8 Flash works on the free tier and accepts Flash-Lite's thought signatures
+both after a correction and mid-turn. Three runs with the failures forced
+(scripts/escalation_smoke.py, 26 requests): 6b9f9aee rescued at rung 3; a2d1fb52 the
+same with a worker dying before the escalated call and a second one staying on 3.8
+Flash; ae2dfc47 one fallback turn, then back to Flash-Lite. All three ledgers clean.
+
+What the real calls found that tests could not. (1) 3.8 Flash is slow and often busy:
+47 s and a 60 s timeout in the probes, a 503 on the judge, and 5 of 11 requests retried
+in the runs. So the judge's default went to Flash-Lite, the judge got its retries back,
+and it now records why a call gave no verdict. (2) Timed-out retries can outlast a
+90 s lease, so the loop heartbeats before a fallback; between retries it still doesn't
+(fencing keeps the ledger right, the requests are wasted).
+
+Also fixed: three test_gemini_client tests failed for the first hour after midnight
+Pacific, because park() backdated runs an hour, out of the quota day.
+
+Not verified: a failure the model made by itself, a real outage, kill -9 of a real
+worker on this path, Render or Neon, real tools, the judge in a full eval run.
+
+## P3 on Gemini: thinking level and caching, measured (30 Oct)
+Built by Claude Code; see learn/P3_GEMINI.md. Explain-back owed.
+
+GEMINI_THINKING_LEVEL is opt-in and off by default, so P7's request bytes don't change.
+Measured with live_smoke --mode public_real (real model, fake tools, local Postgres, free
+tier, 35 requests): low $0.0028 a run, medium $0.0051, both 5/5 on the same domains. Implicit
+caching read zero tokens on all 35 calls. The default stays unset, because fake tools can't
+show whether low hurts accuracy: the eval decides that once the labels exist.
+
+Found on the way: the first batch sat pending for 10 minutes with 35 rows left open by pytest
+in the test database. Workers claim the oldest open run; clearing those rows fixed it, though
+the exact cause of the stall wasn't pinned down. No real calls were made during it (checked in
+the ledger). Clear open rows before running a harness on that database.
+
+## P2: the first real search and fetch (30 Oct)
+Checked by Claude Code; see the end of learn/REAL_TOOLS.md.
+
+One Tavily search and one page fetch from the Windows laptop, using the real functions. The
+format written from memory was correct and the pinned fetcher works with real TLS, so nothing
+changed. Not verified: a full live-mode run. The eval will be the first.
+
+## The first live eval: real accuracy numbers (30 Oct)
+Built by Claude Code; see learn/P6_LIVE_EVAL.md. Explain-back owed.
+
+20 companies labelled by hand. Twelve rows were lost from the workbook and rebuilt from screenshots;
+fields in doubt stayed out of scoring until Sakshi answered, and 3 still are. Result (local Postgres,
+free tier, $0): 87/116 = 0.75, and 81/96 = 0.84 without industry. Industry's 0.30 mostly reflects a
+strict judge and broad labels. It was left as measured, and changing the rule is her decision.
+
+Requests: 170 Gemini (151 model + 19 judge) including the 7-request CRED rerun. The main run's 163 went
+past both my 100-140 estimate and the 160 stop by 3, because the cap is only checked between runs.
+Tavily: 80 searches, above my 20-60 estimate.
+
+What it found: 1 run in 5 needed the repair ladder's re-ask; the agent never flags a field; it reads
+snippets far more than pages (80 searches, 4 fetches); caching does read 23.5% on real-tool prompts.
+Also fixed: funding_stage "unknown" counted as a made-up claim, and a flaky race test (a fixed 50 ms
+sleep). The race test failed once under load and that commit (cdaf65b) was pushed anyway, because the
+command didn't stop on failure; fixed in b252ea0, and commits are now gated on the checks.
+
+No new dependency. Floors moved to 0.7 / 0.7; the 0.85 precision placeholder isn't met.
+
+## Industry re-judged with a clearer rule (30 Oct)
+Built by Claude Code; see learn/P6_LIVE_EVAL.md section 5. Explain-back owed.
+
+Sakshi's decision, after seeing the misses. The first rule failed answers that plainly fit ("Financial
+Services / Software" against "Financial Services"). The new rule counts a more specific part of the label
+as the same. Same model, same saved answers, 18 requests, no agent runs. Industry went from 6/20 to 15/20,
+overall from 0.75 to 0.83. Without industry it's still 0.84, because no judge touches those fields.
+
+This rule was written after seeing the score, so it isn't a blind measurement, and results.json keeps both
+sets of verdicts. Two "same" verdicts look generous (OpenAI, Atlassian: the answer is broader than the
+label), and Vokal against Agsure is inconsistent. They weren't corrected by hand; without those two it's
+0.81. No negative controls were run. Floors moved to 0.78; the 0.85 placeholder still isn't met.

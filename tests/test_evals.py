@@ -1,9 +1,8 @@
-"""P6: the scorer, the LLM judge (real SDK, mock transport) and the CI gate. No network."""
+"""P6: the scorer, the LLM judge (Gemini REST, mock transport) and the CI gate. No network."""
 
 import json
 from typing import Any
 
-import anthropic
 import httpx2
 import pytest
 
@@ -72,6 +71,46 @@ def test_a_failed_run_scores_every_field_wrong() -> None:
     assert {v["method"] for v in scored.values()} == {"no_record"}
 
 
+@pytest.mark.parametrize(
+    ("predicted", "outcome"),
+    [
+        ("United States", "correct"),
+        ("USA", "correct"),  # the aliases still apply
+        ("Ireland", "correct"),
+        ("United States and Ireland", "correct"),
+        ("Ireland, USA", "correct"),
+        ("Ireland, Canada", "wrong"),  # naming a right one doesn't excuse a wrong one
+        ("Canada", "wrong"),
+    ],
+)
+def test_a_dual_hq_label_accepts_either_country_or_both(predicted: str, outcome: str) -> None:
+    expected = {"hq_country": ["United States", "Ireland"]}
+    record = {"name": "Stripe", "hq_country": predicted}
+    assert score_record(expected, record)["hq_country"]["outcome"] == outcome
+
+
+@pytest.mark.parametrize(
+    ("label", "answer", "outcome"),
+    [
+        (None, "unknown", "correct"),  # saying "unknown" about the unknowable is right
+        ("unknown", None, "correct"),
+        ("unknown", "unknown", "correct"),
+        ("series_a", "unknown", "wrong"),  # no answer, where one exists: still a miss
+        (None, "series_a", "wrong"),  # a confident answer to the unknowable was made up
+    ],
+)
+def test_funding_unknown_means_no_answer(
+    label: str | None, answer: str | None, outcome: str
+) -> None:
+    record = {"name": "x", "funding_stage": answer}
+    assert score_record({"funding_stage": label}, record)["funding_stage"]["outcome"] == outcome
+
+
+def test_a_single_country_label_stays_exact() -> None:
+    record = {"name": "Stripe", "hq_country": "United States and Ireland"}
+    assert score_record({"hq_country": "United States"}, record)["hq_country"]["outcome"] == "wrong"
+
+
 def test_industry_uses_the_judge_and_says_so() -> None:
     scored = score_record(EXPECTED, predicted(industry="Payment processing"), lambda e, p: True)
     assert scored["industry"]["outcome"] == "correct" and scored["industry"]["method"] == "judge"
@@ -92,41 +131,99 @@ def test_summary_separates_accuracy_from_precision() -> None:
     assert o["precision"] == round(16 / 17, 3)  # abstentions don't count against it
 
 
-# ── the judge, through the real SDK ──────────────────────────────────────
-def judge_with(answer: dict[str, Any] | int) -> tuple[IndustryJudge, list[dict[str, Any]]]:
-    bodies: list[dict[str, Any]] = []
+# ── the judge, through a mock Gemini transport ───────────────────────────
+JUDGE_MODEL = "gemini-3.5-flash-lite"
+
+
+def judge_with(
+    answer: dict[str, Any] | int, finish: str = "STOP"
+) -> tuple[IndustryJudge, list[httpx2.Request]]:
+    seen: list[httpx2.Request] = []
 
     def handler(request: httpx2.Request) -> httpx2.Response:
-        bodies.append(json.loads(request.content))
+        seen.append(request)
         if isinstance(answer, int):
-            return httpx2.Response(
-                answer, json={"type": "error", "error": {"type": "x", "message": "x"}}
-            )
+            return httpx2.Response(answer, json={"error": {"code": answer, "message": "x"}})
         return httpx2.Response(
             200,
             json={
-                "id": "m", "type": "message", "role": "assistant", "model": "claude-sonnet-5-5",
-                "content": [{"type": "text", "text": json.dumps(answer)}],
-                "stop_reason": "end_turn", "stop_sequence": None,
-                "usage": {"input_tokens": 300, "output_tokens": 40},
+                "candidates": [{
+                    "content": {"role": "model", "parts": [
+                        {"text": "(weighing)", "thought": True, "thoughtSignature": "s"},
+                        {"text": json.dumps(answer)},
+                    ]},
+                    "finishReason": finish,
+                }],
+                "usageMetadata": {
+                    "promptTokenCount": 300, "candidatesTokenCount": 30, "thoughtsTokenCount": 10,
+                },
             },
         )  # fmt: skip
 
-    sdk = anthropic.Anthropic(
-        api_key="test-not-a-real-key",
-        max_retries=0,
-        http_client=anthropic.DefaultHttpxClient(transport=httpx2.MockTransport(handler)),
-    )
-    return IndustryJudge("claude-sonnet-5-5", client=sdk), bodies
+    client = httpx2.Client(transport=httpx2.MockTransport(handler))
+    return IndustryJudge(JUDGE_MODEL, client=client, api_key="test-not-a-real-key"), seen
 
 
 def test_judge_asks_for_a_schema_constrained_verdict_and_prices_it() -> None:
-    judge, bodies = judge_with({"verdict": "same", "reason": "both payments"})
+    judge, seen = judge_with({"verdict": "same", "reason": "both payments"})
     assert judge.same("Fintech / Payments", "Payment processing") is True
-    fmt = bodies[0]["output_config"]["format"]
-    assert fmt["type"] == "json_schema"
-    assert fmt["schema"]["properties"]["verdict"]["enum"] == ["same", "different", "unsure"]
-    assert judge.calls == 1 and judge.cost_usd == pytest.approx((300 * 2 + 40 * 10) / 1e6)
+    assert judge.reasons[0]["reason"] == "both payments"  # kept, so a verdict can be audited
+    request = seen[0]
+    assert str(request.url).endswith(f"/models/{JUDGE_MODEL}:generateContent")
+    assert request.headers["x-goog-api-key"] == "test-not-a-real-key"
+    assert "test-not-a-real-key" not in str(request.url)  # the key never rides in the URL
+    config = json.loads(request.content)["generationConfig"]
+    assert config["responseMimeType"] == "application/json"
+    assert config["responseJsonSchema"]["properties"]["verdict"]["enum"] == [
+        "same",
+        "different",
+        "unsure",
+    ]
+    # priced at Flash-Lite's paid rate; thinking counts as output
+    assert judge.calls == 1 and judge.cost_usd == pytest.approx((300 * 0.30 + 40 * 2.50) / 1e6)
+
+
+def test_judge_without_a_key_refuses_before_any_call(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    with pytest.raises(RuntimeError, match="GEMINI_API_KEY"):
+        IndustryJudge(JUDGE_MODEL)
+
+
+def test_a_judge_cut_off_by_max_tokens_gives_no_verdict_but_is_still_priced() -> None:
+    judge, _ = judge_with({"verdict": "same", "reason": "x"}, finish="MAX_TOKENS")
+    assert judge.same("a", "b") is None
+    assert judge.calls == 1 and judge.cost_usd > 0
+    assert judge.errors == ["no verdict: MAX_TOKENS"]
+
+
+def test_a_refused_judge_call_says_why_without_quoting_the_key() -> None:
+    judge, _ = judge_with(400)
+    assert judge.same("a", "b") is None
+    assert judge.calls == 0 and judge.cost_usd == 0  # the API refused: nothing was metered
+    assert "400" in judge.errors[0] and "test-not-a-real-key" not in judge.errors[0]
+
+
+def test_a_transient_503_is_retried_like_any_model_call() -> None:
+    """Measured on 3.8 Flash: 503 "high demand". One blip must not cost a verdict."""
+    replies = [
+        httpx2.Response(503, json={"error": {"code": 503, "message": "high demand"}}),
+        httpx2.Response(
+            200,
+            json={
+                "candidates": [
+                    {
+                        "content": {"parts": [{"text": '{"verdict": "same", "reason": "x"}'}]},
+                        "finishReason": "STOP",
+                    }
+                ],
+                "usageMetadata": {"promptTokenCount": 300, "candidatesTokenCount": 30},
+            },
+        ),
+    ]
+    client = httpx2.Client(transport=httpx2.MockTransport(lambda _r: replies.pop(0)))
+    judge = IndustryJudge(JUDGE_MODEL, client=client, api_key="test-not-a-real-key")
+    assert judge.same("a", "b") is True
+    assert judge.calls == 1 and judge.errors == []
 
 
 @pytest.mark.parametrize(

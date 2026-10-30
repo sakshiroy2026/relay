@@ -36,9 +36,10 @@ the reply's parts verbatim and sends them straight back. Rebuilding them from
 text would be an edit, and the run would stop being resumable. This is the same
 trick the Anthropic adapter plays with thinking blocks.
 
-Why no thinking config: `thinkingLevel` / `thinkingBudget` are spelled
-differently across model generations, so nothing is sent and each model uses its
-own default. Thinking tokens are billed as output either way, and
+Why thinking config is opt-in: `thinkingLevel` / `thinkingBudget` are spelled
+differently across model generations, so by default nothing is sent and each
+model uses its own default. GEMINI_THINKING_LEVEL (P3) sends `thinkingLevel` to
+the 3.x models only. Thinking tokens are billed as output either way, and
 `gemini_max_output_tokens` leaves room for them inside one reply.
 """
 
@@ -63,6 +64,7 @@ SIGNATURE_TROUBLE = "thought signature"  # the 400's wording when a replayed sig
 # backoff, so they are fatal; the per-minute ones are exactly what retries are for.
 DAILY_QUOTA_MARKERS = ("perday", "per day", "requestsperday")
 SYNTHETIC_ID_PREFIX = "relayfc-"  # marks a tool-call id Relay minted, not Gemini
+THINKING_LEVEL_MODELS = ("gemini-3",)  # the generation that spells it `thinkingLevel`
 
 # finishReason -> Relay's stop reason. A reply with a functionCall in it is a
 # tool turn whatever the finish reason says, so that case is handled first.
@@ -193,7 +195,7 @@ def synthetic_call_id(turn: int, position: int) -> str:
     return f"{SYNTHETIC_ID_PREFIX}{turn}-{position}"
 
 
-def _usage(body: dict[str, Any]) -> tuple[int, int, int]:
+def usage_tokens(body: dict[str, Any]) -> tuple[int, int, int]:
     """(uncached input, cache reads, output). Google bills thinking as output."""
     usage = body.get("usageMetadata") or {}
     prompt = int(usage.get("promptTokenCount") or 0)
@@ -227,7 +229,7 @@ def to_response(requested_model: str, body: dict[str, Any], turn: int) -> Respon
     else:
         stop = _STOP.get(finish, "other")
 
-    uncached, cache_read, output = _usage(body)
+    uncached, cache_read, output = usage_tokens(body)
     return Response(
         model=requested_model,  # prices are looked up by what we asked for, checked at boot
         content=text,
@@ -265,6 +267,14 @@ def is_daily_quota(response: httpx2.Response) -> bool:
     return any(marker.replace(" ", "") in haystack for marker in DAILY_QUOTA_MARKERS)
 
 
+def generation_config(model: str) -> dict[str, Any]:
+    """The per-call settings. With no level set, exactly what P7 always sent."""
+    config: dict[str, Any] = {"maxOutputTokens": settings.gemini_max_output_tokens}
+    if settings.gemini_thinking_level and model.startswith(THINKING_LEVEL_MODELS):
+        config["thinkingConfig"] = {"thinkingLevel": settings.gemini_thinking_level}
+    return config
+
+
 # ── the client ───────────────────────────────────────────────────────────
 class GeminiLLMClient:
     def __init__(self, client: httpx2.Client | None = None, api_key: str | None = None) -> None:
@@ -276,7 +286,8 @@ class GeminiLLMClient:
         self._client = client or httpx2.Client(timeout=settings.llm_timeout_seconds)
         self._headers = {"x-goog-api-key": key, "Content-Type": "application/json"}
 
-    def _post(self, model: str, payload: dict[str, Any]) -> dict[str, Any]:
+    def generate(self, model: str, payload: dict[str, Any]) -> dict[str, Any]:
+        """One generateContent request, errors mapped to Retryable / Fatal."""
         url = f"{API_ROOT}/models/{model}:generateContent"
         try:
             response = self._client.post(url, json=payload, headers=self._headers)
@@ -311,17 +322,17 @@ class GeminiLLMClient:
             "systemInstruction": {"parts": [{"text": system}]},
             "contents": contents,
             "tools": [{"functionDeclarations": to_function_declarations(tools)}],
-            "generationConfig": {"maxOutputTokens": settings.gemini_max_output_tokens},
+            "generationConfig": generation_config(model),
         }
         try:
-            body = self._post(model, payload)
+            body = self.generate(model, payload)
         except _SignatureTrouble:
             log.warning(
                 "model: replayed thought signatures rejected; stripping them and retrying once"
             )
             payload["contents"] = strip_signatures(contents)
             try:
-                body = self._post(model, payload)
+                body = self.generate(model, payload)
             except _SignatureTrouble as exc:  # can't happen with no signatures left
                 raise FatalError("model: thought-signature mismatch persisted after strip") from exc
         return to_response(model, body, turn)

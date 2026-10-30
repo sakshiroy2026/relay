@@ -39,7 +39,9 @@ no Anthropic key ever arrived. `relay/llm/gemini_client.py` is the adapter
 (`GEMINI_MODEL`, default `gemini-3.5-flash-lite`); `live` and the new
 `public_real` run modes both use it. The Claude adapter stays but is **unused**:
 don't delete it, and don't put a Claude model on a path a Gemini run can take
-(`factory.escalation_allowed()` is the gate). Calls are priced at Google's paid
+(`factory.escalation_model()` / `fallback_model()` are the gate: each provider has
+its own pair, `GEMINI_ESCALATION_MODEL` / `GEMINI_FALLBACK_MODEL`, and a cross-family
+id is dropped). Calls are priced at Google's paid
 rates on purpose, so the budget cap and `/ops` keep meaning something while the
 bill is $0.
 
@@ -64,6 +66,21 @@ run ids and what was *not* checked: `learn/P7_GEMINI.md` §9.
 project and never ask Sakshi for a card. "Free" still costs *quota*, so the
 rule stands: state the request count and wait for her "go" before any real
 call.
+
+## Since P7 (30 Oct 2026, branch `p5-gemini`)
+
+Built and verified: P5 on Gemini (Flash-Lite -> 3.8 Flash, `learn/P5_GEMINI.md`), the eval
+judge on Gemini (default Flash-Lite), the P3 measurements (`learn/P3_GEMINI.md`,
+`GEMINI_THINKING_LEVEL` stays unset until the eval compares accuracy), and the first real
+Tavily search and fetch (end of `learn/REAL_TOOLS.md`). 269 tests. The Anthropic numbers in
+"The paid phase" below are history: the remaining real work is the eval.
+Real-call harnesses on the local test database: mark leftover `pending` / `running` rows
+`dead` first, or workers can stall on what pytest left behind.
+
+The first live eval is done (branch `eval-live`, `learn/P6_LIVE_EVAL.md`): 20 labelled companies,
+0.84 on the factual fields, 0.83 overall (0.75 under the judge's first rule, which was changed after
+seeing the score: both are in `evals/results.json`), local Postgres. Open: 3 funding labels, and the
+agent never flags. No `Co-Authored-By` line or Claude Code PR footer: Sakshi's decision.
 
 ## Where things stood before P7
 

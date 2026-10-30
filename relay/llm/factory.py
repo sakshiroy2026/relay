@@ -9,7 +9,11 @@ WHAT IT IS  The switchboard. A run is `demo` (scripted fake model + fake tools:
             follows LLM_PROVIDER / TOOLS_PROVIDER.
 GOES IN     resolve_mode(mode) -> (llm_provider, tools_provider).
             make_llm(provider) / planner_model(provider).
-COMES OUT   An LLMClient and the model id to ask it for.
+            escalation_model(provider) / fallback_model(provider) (P5): each
+            provider has its own pair, and a model from another provider's
+            family is dropped ("" = off), so a Gemini run can never be handed
+            a Claude id it cannot call.
+COMES OUT   An LLMClient and the model id(s) to ask it for.
 TOUCHES     Nothing at call time. The real client is built once per process
             (the SDK keeps a connection pool) on first use.
 FAILS WHEN  A provider with no client, or a model with no price -> RuntimeError
@@ -59,14 +63,45 @@ def planner_model(provider: str | None = None) -> str:
 
 
 def escalation_allowed(provider: str | None = None) -> bool:
-    """Can this provider run P5's rung-3 escalation / outage fallback?
+    """Can this provider run P5's rung-3 escalation / outage fallback at all?
 
-    Only Anthropic. ESCALATION_MODEL and FALLBACK_MODEL name Claude models, and
-    a Gemini client cannot call them: offering them on a Gemini run would put a
-    model on a path that would fail the moment it was taken. Gemini runs keep
-    rungs 0-2 of the repair ladder, which need no second provider.
+    Only a real provider: the fake is a script, and "a stronger fake" would
+    prove nothing. Which model it may use is escalation_model() / fallback_model().
     """
-    return (provider or settings.llm_provider) == "anthropic"
+    return (provider or settings.llm_provider) in MODEL_FAMILY
+
+
+# A run's client can only call its own provider's models: a Claude id on a
+# Gemini run would fail the moment the path was taken, and vice versa.
+MODEL_FAMILY = {"anthropic": "claude-", "gemini": "gemini-"}
+
+
+def _configured(provider: str, kind: Literal["escalation", "fallback"]) -> str:
+    """The setting for this provider's escalation / fallback model, as written."""
+    if provider == "gemini":
+        return (
+            settings.gemini_escalation_model
+            if kind == "escalation"
+            else settings.gemini_fallback_model
+        )
+    return settings.escalation_model if kind == "escalation" else settings.fallback_model
+
+
+def _usable(provider: str, kind: Literal["escalation", "fallback"]) -> str:
+    """The configured model if this provider's client can call it, else "" (= off)."""
+    candidate = _configured(provider, kind)
+    prefix = MODEL_FAMILY.get(provider)
+    return candidate if prefix and candidate.startswith(prefix) else ""
+
+
+def escalation_model(provider: str | None = None) -> str:
+    """Rung 3's model for this provider's runs; "" when it has none."""
+    return _usable(provider or settings.llm_provider, "escalation")
+
+
+def fallback_model(provider: str | None = None) -> str:
+    """The outage fallback for this provider's runs; "" when it has none."""
+    return _usable(provider or settings.llm_provider, "fallback")
 
 
 def make_llm(provider: str | None = None) -> LLMClient:
@@ -101,8 +136,22 @@ def preflight() -> list[str]:
     # call is made: `live` and `public_real` runs arrive from the API, not from
     # this worker's own settings.
     assert_priced(settings.gemini_model)
+    providers = ["gemini"]
     if settings.llm_provider == "anthropic" or os.environ.get("ANTHROPIC_API_KEY"):
         assert_priced(settings.anthropic_model)
+        providers.append("anthropic")
+    # P5: an escalation / fallback model is priced before any run needs it
+    # (can_afford() estimates it mid-run); a cross-family id is named, not used.
+    kinds: tuple[Literal["escalation", "fallback"], ...] = ("escalation", "fallback")
+    for provider in providers:
+        for kind in kinds:
+            if usable := _usable(provider, kind):
+                assert_priced(usable)
+            elif configured := _configured(provider, kind):
+                warnings.append(
+                    f"{kind} model {configured!r} is not a {provider} model: "
+                    f"{provider} runs will not use it"
+                )
     if not os.environ.get("GEMINI_API_KEY"):
         warnings.append(
             "GEMINI_API_KEY not set: live and public real-AI runs will fail "
