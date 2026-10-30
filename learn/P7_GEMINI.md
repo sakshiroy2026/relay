@@ -373,8 +373,19 @@ The attempt just before it failed: `a8bee82e`, same domain, ended with `model_st
 ($0.0017) and wrote no record. Its last reply was neither a tool call nor an answer. The ledger keeps
 only `'other'`, not Gemini's finish reason, so the cause is unknown. Seen once; that gives no rate.
 
-Not checked: why `a8bee82e` stopped, and `gemini-3.8-flash` on Render (these runs never needed it, so
-that path has still only run locally, with forced failures).
+Proof: [`34d9af78` screenshot](img/render-label-34d9af78.jpg) and [ledger](proofs/render-34d9af78.json),
+[`a8bee82e` screenshot](img/render-failed-a8bee82e.jpg) and [ledger](proofs/render-a8bee82e.json).
+
+`gemini-3.8-flash` on Render was tried once, and it did not pass. `70daab6a` (stripe.com, no kill,
+`GEMINI_MODEL` set to 3.8 Flash, 30 Oct) ended with `model_fatal` about 82 s after it started: no
+`model_call` row, 0 tokens, `attempt_count` 2. So a second worker took over with no kill, but the
+ledger can't say whether that was the 15 s lease running out or a redeploy. The error's text is in
+the ledger row, which the API doesn't return, so the cause isn't known here yet. Proof:
+[running](img/render-38flash-running-70daab6a.jpg), [failed](img/render-38flash-failed-70daab6a.jpg),
+[ledger](proofs/render-70daab6a.json).
+
+Not checked: why `a8bee82e` stopped, why `70daab6a` failed, and any successful `gemini-3.8-flash` run
+on Render. That path has still only worked locally, with forced failures.
 
 ## 10. Interview lines
 

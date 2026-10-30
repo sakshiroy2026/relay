@@ -1,0 +1,42 @@
+{
+ "run": {
+  "id": "70daab6a-b04b-4b66-a333-5f6b3eeae76c",
+  "status": "failed",
+  "input": {
+   "mode": "public_real",
+   "domain": "stripe.com"
+  },
+  "result": null,
+  "error": null,
+  "attempt_count": 2,
+  "next_step_index": 0,
+  "lease_owner": "srv-dbh465gu01pc73b1qh7g-hibernate-6bd85d87c9-l2h67:29",
+  "lease_expires_at": "2026-10-30T11:30:06.433049Z",
+  "server_now": "2026-10-30T11:30:58.831318Z",
+  "spent_usd": "0.000000",
+  "budget_usd": "0.250000",
+  "tokens_in": 0,
+  "tokens_out": 0,
+  "agent_version": "enrich@v2",
+  "created_at": "2026-10-30T11:29:33.929101Z",
+  "started_at": "2026-10-30T11:29:34.222742Z",
+  "finished_at": "2026-10-30T11:30:56.965386Z",
+  "unread_sources": []
+ },
+ "steps": [
+  {
+   "step_index": 0,
+   "kind": "run_started",
+   "written_by": "api",
+   "created_at": "2026-10-30T11:29:33.929101Z",
+   "summary": "run started for stripe.com"
+  },
+  {
+   "step_index": 1,
+   "kind": "error",
+   "written_by": "srv-dbh465gu01pc73b1qh7g-hibernate-6bd85d87c9-l2h67:29",
+   "created_at": "2026-10-30T11:30:56.961234Z",
+   "summary": "error: model_fatal"
+  }
+ ]
+}

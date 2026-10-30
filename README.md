@@ -87,7 +87,10 @@ listed `https://stripe.com/about` as a source, a page the run never opened, so r
 carry a "Not researched" label naming any such source (checked locally with hand-written runs, then
 on a real run on Render, `34d9af78`). The
 first `live`-mode runs came later, with the eval above —
-[`learn/P7_GEMINI.md`](learn/P7_GEMINI.md) §9 lists what was and wasn't checked.
+[`learn/P7_GEMINI.md`](learn/P7_GEMINI.md) §9 lists what was and wasn't checked, including two failed
+Render runs, with screenshots and ledgers.
+
+![Real-AI run 34d9af78 on Render: the "Not researched" box above the record names a source the run never opened](learn/img/render-label-34d9af78.jpg)
 
 `python -m chaos.crash_test --n 200`: each iteration starts a run, waits a random 0–10 s, runs `docker kill` on the container that owns the run, waits for the run to finish, and checks its ledger. The runs go one at a time.
 
