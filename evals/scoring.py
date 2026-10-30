@@ -9,8 +9,10 @@ WHAT IT IS  The deterministic half of the eval. For each field it decides
             text, so it can be handed to the LLM judge (evals/judge.py); without
             a judge a word-overlap heuristic stands in, labelled as such.
 GOES IN     score_record(expected, predicted, judge=None): the label's
-            `expected` dict (a null value = "not knowable from public sources")
-            and the run's result record (or None for a failed run).
+            `expected` dict (a null value = "not knowable from public sources";
+            `hq_country` may be a list when a company is dual-headquartered, and
+            then any of them, or several of them together, is right) and the
+            run's result record (or None for a failed run).
 COMES OUT   {field: {"outcome", "expected", "predicted", "method"}} per record;
             summarize() -> accuracy, precision, abstention per field and overall.
 TOUCHES     Nothing (the judge, if passed, makes its own calls).
@@ -57,11 +59,20 @@ def _industry_heuristic(expected: str, predicted: str) -> bool:
     return bool(a and b) and len(a & b) / len(a | b) >= 0.5
 
 
+def _hq_matches(expected: Any, predicted: Any) -> bool:
+    """One country must match exactly. A dual HQ accepts either, or both named together."""
+    if not isinstance(expected, list):
+        return norm_country(str(expected)) == norm_country(str(predicted))
+    accepted = {norm_country(str(country)) for country in expected}
+    parts = re.split(r"[,;/&]| and ", str(predicted))
+    return all(norm_country(part) in accepted for part in parts)
+
+
 def _same(field: str, expected: Any, predicted: Any, judge: Judge | None) -> tuple[bool, str]:
     if field == "name":
         return norm_name(str(expected)) == norm_name(str(predicted)), "normalized"
     if field == "hq_country":
-        return norm_country(str(expected)) == norm_country(str(predicted)), "normalized"
+        return _hq_matches(expected, predicted), "normalized"
     if field == "founded_year":
         try:
             return int(expected) == int(predicted), "exact"

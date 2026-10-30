@@ -10,6 +10,8 @@ company per line:
 - Label only what you verified yourself; leave a field out to skip scoring it.
 - `null` means "not knowable from public sources": the agent is right to leave it
   empty or flag it, and wrong to invent a value.
+- `hq_country` may be a list for a dual-headquartered company
+  (`["United States", "Ireland"]`): either one, or both together, counts as right.
 - `employee_range` and `funding_stage` must use the schema's values
   (`relay/agent/schemas.py`).
 

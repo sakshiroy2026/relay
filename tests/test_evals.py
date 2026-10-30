@@ -71,6 +71,29 @@ def test_a_failed_run_scores_every_field_wrong() -> None:
     assert {v["method"] for v in scored.values()} == {"no_record"}
 
 
+@pytest.mark.parametrize(
+    ("predicted", "outcome"),
+    [
+        ("United States", "correct"),
+        ("USA", "correct"),  # the aliases still apply
+        ("Ireland", "correct"),
+        ("United States and Ireland", "correct"),
+        ("Ireland, USA", "correct"),
+        ("Ireland, Canada", "wrong"),  # naming a right one doesn't excuse a wrong one
+        ("Canada", "wrong"),
+    ],
+)
+def test_a_dual_hq_label_accepts_either_country_or_both(predicted: str, outcome: str) -> None:
+    expected = {"hq_country": ["United States", "Ireland"]}
+    record = {"name": "Stripe", "hq_country": predicted}
+    assert score_record(expected, record)["hq_country"]["outcome"] == outcome
+
+
+def test_a_single_country_label_stays_exact() -> None:
+    record = {"name": "Stripe", "hq_country": "United States and Ireland"}
+    assert score_record({"hq_country": "United States"}, record)["hq_country"]["outcome"] == "wrong"
+
+
 def test_industry_uses_the_judge_and_says_so() -> None:
     scored = score_record(EXPECTED, predicted(industry="Payment processing"), lambda e, p: True)
     assert scored["industry"]["outcome"] == "correct" and scored["industry"]["method"] == "judge"

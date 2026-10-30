@@ -7,11 +7,12 @@ WHAT IT IS  The eval loop: one run per hand-labelled company, scored field by
                      scorer end to end; results go to results.demo.json and can
                      never satisfy the CI gate.
               live — the real model + real tools; costs money, so it refuses
-                     without --yes-spend, prints the estimate first, and stops
-                     creating runs at --max-total-usd.
+                     without --yes-spend, prints the estimate first, spaces the
+                     runs for the free tier's per-minute limit, and stops creating
+                     runs at --max-total-usd or --max-requests.
 GOES IN     python -m evals.run_eval --golden evals/golden.jsonl --mode live --yes-spend
                 [--judge-model gemini-3.5-flash-lite | --no-judge] [--workers 2]
-                [--max-total-usd 1.0]
+                [--max-total-usd 1.0] [--max-requests 160] [--gap-seconds 60]
             Labels: one JSON object per line, {"domain", "expected": {field: value
             or null}, "notes"?} (format: evals/README.md).
 COMES OUT   evals/results.json (live) or evals/results.demo.json (demo): every
@@ -20,7 +21,10 @@ TOUCHES     tenants (an 'eval-live' / 'eval-demo' tenant), runs/steps/companies,
             local worker processes; in live mode the Gemini API (runs and the
             judge, GEMINI_API_KEY) and the web (Tavily, TAVILY_API_KEY).
 FAILS WHEN  No labels -> exits 2. A run that never finishes is scored as a
-            missing record (every field wrong), not dropped.
+            missing record (every field wrong), not dropped. A daily-quota error
+            stops the eval: later runs would fail the same way and read as wrong
+            answers. `labels` counts the runs actually scored, so the CI gate
+            refuses a cut-short eval.
 """
 
 import argparse
@@ -35,7 +39,7 @@ from typing import Any
 
 from psycopg.types.json import Jsonb
 
-from chaos.harness import query_one, spawn_workers, stop_workers, wait_terminal
+from chaos.harness import query_all, query_one, spawn_workers, stop_workers, wait_terminal
 from evals.judge import DEFAULT_MODEL as JUDGE_MODEL
 from evals.judge import IndustryJudge
 from evals.scoring import score_record, summarize
@@ -49,6 +53,7 @@ HERE = Path(__file__).parent
 # results record the real figures.
 EST_RUN_USD = 0.005
 EST_JUDGE_USD = 0.0002
+LOCAL_DB_HOSTS = ("@127.0.0.1", "@localhost")
 
 
 def load_labels(path: Path) -> list[dict[str, Any]]:
@@ -114,6 +119,8 @@ def main() -> None:
     parser.add_argument("--no-judge", action="store_true")
     parser.add_argument("--workers", type=int, default=2)
     parser.add_argument("--max-total-usd", type=float, default=1.0)
+    parser.add_argument("--max-requests", type=int, default=160, help="model + judge, live mode")
+    parser.add_argument("--gap-seconds", type=float, default=60.0, help="between live runs")
     args = parser.parse_args()
 
     labels = load_labels(args.golden)
@@ -143,13 +150,21 @@ def main() -> None:
     workers = spawn_workers(args.workers, {})
     rows: list[dict[str, Any]] = []
     spent = 0.0
+    model_requests = 0
     started = time.monotonic()
     try:
         time.sleep(2)
-        for label in labels:
+        for n, label in enumerate(labels):
             if spent >= args.max_total_usd:
                 print(f"stopping: ${spent:.4f} spent")
                 break
+            if args.mode == "live":
+                used = model_requests + (judge.calls if judge else 0)
+                if used >= args.max_requests:
+                    print(f"stopping: {used} requests used, cap {args.max_requests}")
+                    break
+                if n:
+                    time.sleep(args.gap_seconds)
             run_id = create_run(tenant_id, label["domain"], args.mode)
             wait_terminal([run_id], timeout_s=300)
             run = query_one(
@@ -157,6 +172,20 @@ def main() -> None:
                 (run_id,),
             )
             spent += float(run["spent_usd"]) if args.mode == "live" else 0.0
+            # tries that ended in a reply; a call that failed every try leaves no row
+            tries = query_one(
+                "SELECT count(*) AS calls, "
+                "coalesce(sum((payload->>'attempts')::int), 0) AS tries "
+                "FROM steps WHERE run_id = %s AND kind = 'model_call'",
+                (run_id,),
+            )
+            model_requests += int(tries["tries"])
+            failure = query_all(
+                "SELECT payload FROM steps WHERE run_id = %s AND kind = 'error' "
+                "ORDER BY step_index DESC LIMIT 1",
+                (run_id,),
+            )
+            error = failure[0]["payload"] if failure else {}
             scored = score_record(label["expected"], run["result"], judge.same if judge else None)
             ok = sum(1 for f in scored.values() if f["outcome"] == "correct")
             print(
@@ -168,9 +197,14 @@ def main() -> None:
                     "run_id": run_id[:8],
                     "status": run["status"],
                     "cost_usd": float(run["spent_usd"]),
+                    "model_calls": int(tries["calls"]),
+                    "error": error.get("reason"),
                     "fields": scored,
                 }
             )
+            if "quota" in str(error.get("detail", "")).lower():
+                print("stopping: the model's daily quota is used up")
+                break
     finally:
         stop_workers(workers)
         pool.close()
@@ -181,9 +215,15 @@ def main() -> None:
         # the model the mode actually uses, not a hardcoded provider's
         "model": planner_model(resolve_mode(args.mode)[0]),
         "judge": args.judge_model if judge else None,
+        "database": "local"
+        if any(h in settings.database_url for h in LOCAL_DB_HOSTS)
+        else "remote",
+        "gemini_thinking_level": settings.gemini_thinking_level or "model default",
+        "model_requests": model_requests,
         "commit": git_commit(),
         "golden": str(args.golden),
-        "labels": len(labels),
+        "labels": len(rows),  # scored, not merely listed: the gate must see a cut-short eval
+        "labels_in_file": len(labels),
         "cost_usd": {
             "runs": round(spent, 6),
             "judge": round(judge.cost_usd, 6) if judge else 0.0,
