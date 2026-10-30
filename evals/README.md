@@ -1,6 +1,6 @@
 # Evals — the golden set and how it is scored
 
-`golden.jsonl` (Day 18, hand-labelled by Sakshi; not in the repo yet) holds one
+`golden.jsonl` (Day 18, hand-labelled by Sakshi) holds one
 company per line:
 
 ```json

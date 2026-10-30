@@ -5,7 +5,9 @@ WHAT IT IS  The deterministic half of the eval. For each field it decides
             suffixes, country aliases) and nothing fuzzier than that. A field
             the agent put in `flagged_fields` instead of guessing is ABSTAINED,
             not wrong: the system prompt asks it to flag what sources don't
-            settle, and the metric must reward doing so. `industry` is free
+            settle, and the metric must reward doing so. `funding_stage: "unknown"`
+            is the schema's way of giving no answer, so it counts as empty rather
+            than as a claim. `industry` is free
             text, so it can be handed to the LLM judge (evals/judge.py); without
             a judge a word-overlap heuristic stands in, labelled as such.
 GOES IN     score_record(expected, predicted, judge=None): the label's
@@ -99,17 +101,19 @@ def score_record(
             continue  # not labelled: not scored
         exp = expected[field]
         got = None if predicted is None else predicted.get(field)
+        wanted = None if field == "funding_stage" and exp == "unknown" else exp
+        answer = None if field == "funding_stage" and got == "unknown" else got
         if predicted is None:
             outcome, method = "wrong", "no_record"
-        elif exp is None:  # the label says: not knowable from public sources
-            outcome = "correct" if got is None or field in flagged else "wrong"
+        elif wanted is None:  # the label says: not knowable from public sources
+            outcome = "correct" if answer is None or field in flagged else "wrong"
             method = "unknowable"  # a confident answer here was made up
         elif field in flagged:
             outcome, method = "abstained", "flagged"
-        elif got is None:
+        elif answer is None:
             outcome, method = "wrong", "missing"
         else:
-            same, method = _same(field, exp, got, judge)
+            same, method = _same(field, wanted, answer, judge)
             outcome = "correct" if same else "wrong"
         out[field] = {"outcome": outcome, "expected": exp, "predicted": got, "method": method}
     return out

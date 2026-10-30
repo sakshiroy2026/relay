@@ -174,7 +174,7 @@ written, so the request and response format had never met the real service.
 | 1 `tavily_search` | 5 results parsed in 2.1 s, with titles, URLs and 500-character snippets. The format from memory was right; **no code change needed** |
 | 1 `fetch_page` (`razorpay.com/blog/...`, from those results) | 0.4 s through the pinned-IP fetcher with real TLS: title extracted, text capped at about 8,000 characters |
 
-**Still not verified:** a whole `live`-mode run, where the model chooses the queries and
-pages. The eval will be the first. One search also doesn't show how often results are
+**Since then:** 21 `live` runs in the first eval (80 searches, 4 page fetches:
+`learn/P6_LIVE_EVAL.md`). One search also doesn't show how often results are
 useful: this one returned the same page twice (`http` and `https`), and mostly third-party
 sites rather than the company's own. That's something to check when reading the eval's misses.

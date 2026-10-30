@@ -105,7 +105,6 @@ in the probes). The retries are what got these runs through.
 - The fallback during a real Google outage.
 - The "kill" here is an exception in-process, not `kill -9` of a worker process.
 - Any of this on Render or Neon, or with real tools.
-- The judge inside a full eval run (that needs the labels).
 - Gemini's per-day limit for 3.8 Flash.
 
 **After the merge:** a public real-AI run that fails validation twice can now call 3.8

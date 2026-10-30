@@ -411,3 +411,23 @@ Checked by Claude Code; see the end of learn/REAL_TOOLS.md.
 One Tavily search and one page fetch from the Windows laptop, using the real functions. The
 format written from memory was correct and the pinned fetcher works with real TLS, so nothing
 changed. Not verified: a full live-mode run. The eval will be the first.
+
+## The first live eval: real accuracy numbers (30 Oct)
+Built by Claude Code; see learn/P6_LIVE_EVAL.md. Explain-back owed.
+
+20 companies labelled by hand. Twelve rows were lost from the workbook and rebuilt from screenshots;
+fields in doubt stayed out of scoring until Sakshi answered, and 3 still are. Result (local Postgres,
+free tier, $0): 87/116 = 0.75, and 81/96 = 0.84 without industry. Industry's 0.30 mostly reflects a
+strict judge and broad labels. It was left as measured, and changing the rule is her decision.
+
+Requests: 170 Gemini (151 model + 19 judge) including the 7-request CRED rerun. The main run's 163 went
+past both my 100-140 estimate and the 160 stop by 3, because the cap is only checked between runs.
+Tavily: 80 searches, above my 20-60 estimate.
+
+What it found: 1 run in 5 needed the repair ladder's re-ask; the agent never flags a field; it reads
+snippets far more than pages (80 searches, 4 fetches); caching does read 23.5% on real-tool prompts.
+Also fixed: funding_stage "unknown" counted as a made-up claim, and a flaky race test (a fixed 50 ms
+sleep). The race test failed once under load and that commit (cdaf65b) was pushed anyway, because the
+command didn't stop on failure; fixed in b252ea0, and commits are now gated on the checks.
+
+No new dependency. Floors moved to 0.7 / 0.7; the 0.85 precision placeholder isn't met.

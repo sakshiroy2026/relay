@@ -43,8 +43,10 @@ bd506829 76ac7f7e 5cc00f1e`. All ledgers clean.
 
 **Caching: zero.** Gemini reported `cachedContentTokenCount` 0 on all 35 calls, so
 `cache_read_share` is 0%. These prompts are short (about 2k tokens) and the runs were
-spaced 45 s apart. We don't know which of those is the reason, if either. Don't claim
-any saving from implicit caching on Relay.
+spaced 45 s apart. We don't know which of those is the reason, if either.
+
+**Later, with real tools:** the first eval's longer prompts read 23.5% of input tokens from cache, in
+17 of 21 runs (`learn/P6_LIVE_EVAL.md`). So quote that figure for real-tool runs, and nothing for short ones.
 
 ## 5. Design decisions
 
@@ -66,8 +68,7 @@ turns used different levels.
 - Whether `low` hurts accuracy. **Decide this from the eval, with both levels on the same
   labels, once the labels exist.**
 - Whether `""` behaves like `medium`; it wasn't measured here.
-- Costs with real tools, where fetched pages make prompts much longer. Caching may behave
-  differently there too.
+- The `low` level with real tools. The eval ran at the default: $0.0079 a run.
 - Five runs a level is a small sample: enough to show the size of the gap, not a precise rate.
 
 ## 8. Questions for Sakshi Roy
@@ -84,7 +85,7 @@ turns used different levels.
    the record comes from canned pages, so these runs can't show that. The eval decides.
 2. Thinking is billed as output, and low cut it to about a third. Output is also the
    pricier side, at $2.50 against $0.30 per million tokens.
-3. Only that it was measured and was zero on these short prompts. No caching savings.
+3. Only that it was measured and was zero on these short prompts. Real-tool runs later read 23.5%.
 4. `LLM_EFFORT` defaults to `medium` for Claude. Reusing it would change every Gemini
    request on deploy, when the point was for this to be opt-in.
 </details>
@@ -93,5 +94,5 @@ turns used different levels.
 
 - "I measured thinking levels side by side on the same domains: low cost about 45% less.
   I didn't ship it, because those runs couldn't measure accuracy, and the eval can."
-- "I expected implicit caching to help and measured zero on 35 calls, so the project
-  doesn't claim it."
+- "I measured implicit caching instead of assuming it: zero on short prompts, 23.5% of input
+  tokens on real-tool runs, so I only quote it where it was measured."

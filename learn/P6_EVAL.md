@@ -112,3 +112,8 @@ $0.40 = 50 × $0.006 runs + 50 × $0.002 judge), after Sakshi's go.
 - "Only the one free-text field goes to an LLM judge, schema-constrained to a
   three-value verdict; everything exact is checked by code. CI never calls a paid
   model: it gates on committed live results, and demo results can never pass."
+
+## Update, 30 Oct 2026
+
+The labels exist and the eval has run live: see `learn/P6_LIVE_EVAL.md`. The judge is on Gemini
+(`learn/P5_GEMINI.md`), and the floors in `thresholds.json` are no longer the placeholders above.

@@ -89,6 +89,23 @@ def test_a_dual_hq_label_accepts_either_country_or_both(predicted: str, outcome:
     assert score_record(expected, record)["hq_country"]["outcome"] == outcome
 
 
+@pytest.mark.parametrize(
+    ("label", "answer", "outcome"),
+    [
+        (None, "unknown", "correct"),  # saying "unknown" about the unknowable is right
+        ("unknown", None, "correct"),
+        ("unknown", "unknown", "correct"),
+        ("series_a", "unknown", "wrong"),  # no answer, where one exists: still a miss
+        (None, "series_a", "wrong"),  # a confident answer to the unknowable was made up
+    ],
+)
+def test_funding_unknown_means_no_answer(
+    label: str | None, answer: str | None, outcome: str
+) -> None:
+    record = {"name": "x", "funding_stage": answer}
+    assert score_record({"funding_stage": label}, record)["funding_stage"]["outcome"] == outcome
+
+
 def test_a_single_country_label_stays_exact() -> None:
     record = {"name": "Stripe", "hq_country": "United States and Ireland"}
     assert score_record({"hq_country": "United States"}, record)["hq_country"]["outcome"] == "wrong"

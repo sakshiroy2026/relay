@@ -77,6 +77,10 @@ Tavily search and fetch (end of `learn/REAL_TOOLS.md`). 269 tests. The Anthropic
 Real-call harnesses on the local test database: mark leftover `pending` / `running` rows
 `dead` first, or workers can stall on what pytest left behind.
 
+The first live eval is done (branch `eval-live`, `learn/P6_LIVE_EVAL.md`): 20 labelled companies,
+0.75 overall, 0.84 without `industry`, local Postgres. Open: how `industry` is judged, 3 funding
+labels, and the agent never flags. No `Co-Authored-By` line or Claude Code PR footer: Sakshi's decision.
+
 ## Where things stood before P7
 
 `main` has everything up to PR #2 (Days 16, 9, 10, 17, 11, the client
