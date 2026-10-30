@@ -11,12 +11,12 @@ Now it can: 20 companies, hand-researched, graded field by field.
 ```
 hand labels (golden.jsonl) ---------------+
                                           v
-20 real runs -> records -> scorer + judge -> 98 / 118 correct -> results.json -> CI gate
-                                     (89 / 118 under the judge's first rule)
+20 real runs -> records -> scorer + judge -> 99 / 119 correct -> results.json -> CI gate
+                                     (90 / 119 under the judge's first rule)
 ```
 
 **The exam analogy.** A mark depends on three things: the student, the answer key and the
-marker. A low mark doesn't say which one is at fault. The first mark was 0.75. Sorting the misses
+marker. A low mark doesn't say which one is at fault. The first mark was 0.76. Sorting the misses
 showed many were the marker's, so the marking rule was made clearer and everything re-marked: 0.83.
 Both marks are kept, because a mark that moved after someone saw it needs explaining.
 
@@ -24,7 +24,7 @@ Both marks are kept, because a mark that moved after someone saw it needs explai
 
 | File | One line |
 |---|---|
-| `evals/golden.jsonl` | the answer key: 20 companies, 118 scored fields, sources in `notes` |
+| `evals/golden.jsonl` | the answer key: 20 companies, 119 scored fields, sources in `notes` |
 | `evals/run_eval.py` | spaces live runs, stops at `--max-requests`, stops on a daily-quota error, counts only scored runs as `labels` |
 | `evals/scoring.py` | `hq_country` may be a list (dual HQ); `funding_stage: "unknown"` counts as no answer |
 | `evals/judge.py` | the clearer `industry` rule; keeps the judge's stated reason for each verdict |
@@ -53,22 +53,21 @@ paid rate: $0.0079 a run. All run ids: `evals/results.json`.
 | `hq_country` | 19/20 | 0.95 |
 | `name` | 18/20 | 0.90 |
 | `founded_year` | 16/19 | 0.84 |
-| `funding_stage` | 16/19 | 0.84 |
+| `funding_stage` | 17/20 | 0.85 |
 | `industry`, clearer rule | 15/20 | 0.75 |
 | `employee_range` | 14/20 | 0.70 |
-| **Overall, clearer rule** | **98/118** | **0.83** |
-| **Without `industry`** (no judge involved) | **83/98** | **0.85** |
-| Overall, the first rule (`industry` 6/20 = 0.30) | 89/118 | 0.75 |
+| **Overall, clearer rule** | **99/119** | **0.83** |
+| **Without `industry`** (no judge involved) | **84/99** | **0.85** |
+| Overall, the first rule (`industry` 6/20 = 0.30) | 90/119 | 0.76 |
 
 Precision equals accuracy because the agent never abstained (section 7).
 
-**Added after the run, with no requests:** the funding stage of Stripe (Series I, Apr 2024) and Canva
-(Series F, May 2024, Tracxn), both `series_d+`, answered by the owner from funding tables without being
-shown the agent's answers. Both matched, which moved the factual fields from 81/96 (0.84) to 83/98 (0.85)
-and left overall at 0.83.
-
-**Left out of scoring**, waiting on the owner: Atlassian's funding stage. The owner's source lists Series D
-(2014) as its last round, and 2015 news reports a Nasdaq listing, so it could be `series_d+` or `public`.
+**Added after the run, with no requests:** the three funding labels left open. Stripe (Series I, Apr
+2024) and Canva (Series F, May 2024, Tracxn) are `series_d+`, from funding tables. Atlassian is `public`:
+the owner's table lists Series D (2014) as its last round, a news search found its Nasdaq listing in Dec
+2015, and the owner chose the label, the same way the sheet treats Zomato. That search covered 2015 only.
+The owner wasn't shown the agent's answers. All three matched, which moved the factual fields from 81/96
+(0.84) to 84/99 (0.85) and left overall at 0.83. Nothing is left out of scoring now.
 
 ## 5. The judge: what changed, and how far to trust it
 
@@ -87,8 +86,8 @@ all from different to same, and left 5 pairs different.
 | **Generous** | OpenAI: "Artificial Intelligence" against "Generative AI" | the answer is *broader* than the label; the judge's own reason has it backwards |
 
 Atlassian's "Software" against "proprietary software company" was marked same under both rules, for the
-same backwards reason. **Without those two, `industry` is 13/20 (0.65) and overall 96/118 (0.81).** The
-verdicts were left as the judge gave them, not corrected by hand, so call it 0.81-0.83.
+same backwards reason. **Without those two, `industry` is 13/20 (0.65) and overall 97/119 (0.82).** The
+verdicts were left as the judge gave them, not corrected by hand, so call it 0.82-0.83.
 
 No negative controls were run: pairs that should obviously fail, to test the new rule on purpose.
 
@@ -148,9 +147,9 @@ This sorting is a judgement call from the outputs alone, not a verified re-check
 
 ## 11. Questions to answer yourself
 
-1. The score went from 0.75 to 0.83 without the agent changing. What changed, and how do you say that
+1. The score went from 0.76 to 0.83 without the agent changing. What changed, and how do you say that
    honestly?
-2. Why quote 0.81-0.83 rather than just 0.83?
+2. Why quote 0.82-0.83 rather than just 0.83?
 3. What's the difference between "wrong" and "abstained", and why did nothing abstain?
 4. Why did the CRED rerun need its old company row deleted first?
 5. Why do the floors sit under 0.85, the placeholder from before there was data?
@@ -180,6 +179,6 @@ This sorting is a judgement call from the outputs alone, not a verified re-check
   overall once the free-text industry field is included."
 - "The first industry judge scored 0.30 because it rejected answers that plainly fit. I fixed the rule,
   but that's a change made after seeing a score, so I kept both numbers and checked the new verdicts.
-  Two of them looked too generous, so I quote 0.81 to 0.83."
+  Two of them looked too generous, so I quote 0.82 to 0.83."
 - "The eval found things the tests couldn't: 1 run in 5 needed the repair ladder, and the agent never
   used its flagging path, so I know what to improve next."

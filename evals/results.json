@@ -16,12 +16,12 @@
   "elapsed_s": 1582.5,
   "summary": {
     "overall": {
-      "scored": 118,
-      "correct": 98,
+      "scored": 119,
+      "correct": 99,
       "wrong": 20,
       "abstained": 0,
-      "accuracy": 0.831,
-      "precision": 0.831,
+      "accuracy": 0.832,
+      "precision": 0.832,
       "abstention_rate": 0.0
     },
     "per_field": {
@@ -71,12 +71,12 @@
         "abstention_rate": 0.0
       },
       "funding_stage": {
-        "scored": 19,
-        "correct": 16,
+        "scored": 20,
+        "correct": 17,
         "wrong": 3,
         "abstained": 0,
-        "accuracy": 0.842,
-        "precision": 0.842,
+        "accuracy": 0.85,
+        "precision": 0.85,
         "abstention_rate": 0.0
       }
     },
@@ -121,6 +121,12 @@
           "outcome": "correct",
           "expected": "5000+",
           "predicted": "5000+",
+          "method": "exact"
+        },
+        "funding_stage": {
+          "outcome": "correct",
+          "expected": "public",
+          "predicted": "public",
           "method": "exact"
         }
       }
@@ -1149,12 +1155,12 @@
   "judge_calls": 37,
   "summary_excluding_industry": {
     "overall": {
-      "scored": 98,
-      "correct": 83,
+      "scored": 99,
+      "correct": 84,
       "wrong": 15,
       "abstained": 0,
-      "accuracy": 0.847,
-      "precision": 0.847,
+      "accuracy": 0.848,
+      "precision": 0.848,
       "abstention_rate": 0.0
     },
     "per_field": {
@@ -1204,33 +1210,31 @@
         "abstention_rate": 0.0
       },
       "funding_stage": {
-        "scored": 19,
-        "correct": 16,
+        "scored": 20,
+        "correct": 17,
         "wrong": 3,
         "abstained": 0,
-        "accuracy": 0.842,
-        "precision": 0.842,
+        "accuracy": 0.85,
+        "precision": 0.85,
         "abstention_rate": 0.0
       }
     },
     "records": 20
   },
-  "left_out_of_scoring": [
-    "atlassian.com funding_stage"
-  ],
+  "left_out_of_scoring": [],
   "after_the_eval": {
     "rerun": "careers.cred.club as a803c716, replacing cred.club (db829041): the owner's label keeps the careers domain",
-    "rescored_without_model_calls": "every field but industry, against the owner's final labels (Stripe dual HQ, Myntra, Stripe and Canva funding, Darwinbox employees, Unacademy founded year), with funding_stage 'unknown' counted as no answer",
+    "rescored_without_model_calls": "every field but industry, against the owner's final labels (Stripe dual HQ, Myntra, Stripe, Canva and Atlassian funding, Darwinbox employees, Unacademy founded year), with funding_stage 'unknown' counted as no answer",
     "industry": "re-judged from the agent's saved answers on 30 Oct 2026, AFTER seeing the first score, with a clearer rule: a more specific part of the hand label's industry counts as the same, even with a second detail added. Same model, no agent runs. The first rule's verdicts and score are kept in judge_verdicts_first_rule and summary_first_judge_rule."
   },
   "summary_first_judge_rule": {
     "overall": {
-      "scored": 118,
-      "correct": 89,
+      "scored": 119,
+      "correct": 90,
       "wrong": 29,
       "abstained": 0,
-      "accuracy": 0.754,
-      "precision": 0.754,
+      "accuracy": 0.756,
+      "precision": 0.756,
       "abstention_rate": 0.0
     },
     "per_field": {
@@ -1280,12 +1284,12 @@
         "abstention_rate": 0.0
       },
       "funding_stage": {
-        "scored": 19,
-        "correct": 16,
+        "scored": 20,
+        "correct": 17,
         "wrong": 3,
         "abstained": 0,
-        "accuracy": 0.842,
-        "precision": 0.842,
+        "accuracy": 0.85,
+        "precision": 0.85,
         "abstention_rate": 0.0
       }
     },
