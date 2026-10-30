@@ -69,7 +69,7 @@ had been retyped would have been rejected, not resumed. **Then on Render**
 (Neon, same day): `b0a3aea7` razorpay.com, a visitor-style `real_ai` run
 killed through the demo's `/crash` endpoint; worker `…:29` took over at step
 10 and finished (4 calls, $0.003168, `attempt_count` 2, record clean). No
-`live`-mode run yet (real tools need a Tavily key) —
+`live`-mode run yet; the real tools have had one real search and one real fetch ([`learn/REAL_TOOLS.md`](learn/REAL_TOOLS.md)) —
 [`learn/P7_GEMINI.md`](learn/P7_GEMINI.md) §9 lists what was and wasn't checked.
 
 `python -m chaos.crash_test --n 200`: each iteration starts a run, waits a random 0–10 s, runs `docker kill` on the container that owns the run, waits for the run to finish, and checks its ledger. The runs go one at a time.

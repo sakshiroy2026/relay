@@ -404,3 +404,10 @@ Found on the way: the first batch sat pending for 10 minutes with 35 rows left o
 in the test database. Workers claim the oldest open run; clearing those rows fixed it, though
 the exact cause of the stall wasn't pinned down. No real calls were made during it (checked in
 the ledger). Clear open rows before running a harness on that database.
+
+## P2: the first real search and fetch (30 Oct)
+Checked by Claude Code; see the end of learn/REAL_TOOLS.md.
+
+One Tavily search and one page fetch from the Windows laptop, using the real functions. The
+format written from memory was correct and the pinned fetcher works with real TLS, so nothing
+changed. Not verified: a full live-mode run. The eval will be the first.
