@@ -1,0 +1,117 @@
+{
+  "conditions": {
+    "database": "local Postgres (throwaway container)",
+    "billed": "Gemini free tier, $0; priced_usd is the paid rate",
+    "tools": "fake",
+    "real_requests": 26
+  },
+  "scenarios": [
+    {
+      "scenario": "rung3",
+      "forced": "Flash-Lite's final answers replaced with an invalid record",
+      "run_id": "6b9f9aee",
+      "ok": true,
+      "workers": 1,
+      "models_asked": [
+        "gemini-3.5-flash-lite",
+        "gemini-3.5-flash-lite",
+        "gemini-3.5-flash-lite",
+        "gemini-3.5-flash-lite",
+        "gemini-3.5-flash-lite",
+        "gemini-3.5-flash-lite",
+        "gemini-3.8-flash",
+        "gemini-3.8-flash",
+        "gemini-3.8-flash",
+        "gemini-3.8-flash"
+      ],
+      "models_billed": [
+        "gemini-3.5-flash-lite",
+        "gemini-3.5-flash-lite",
+        "gemini-3.5-flash-lite",
+        "gemini-3.5-flash-lite",
+        "gemini-3.5-flash-lite",
+        "gemini-3.5-flash-lite",
+        "gemini-3.8-flash",
+        "gemini-3.8-flash"
+      ],
+      "fallback_from": [],
+      "repaired_by": [
+        "model_reask",
+        "escalated:gemini-3.8-flash"
+      ],
+      "error": null,
+      "priced_usd": 0.011489,
+      "ledger_problems": []
+    },
+    {
+      "scenario": "killed",
+      "forced": "the same, and the worker dies just before the escalated call",
+      "run_id": "a2d1fb52",
+      "ok": true,
+      "workers": 2,
+      "models_asked": [
+        "gemini-3.5-flash-lite",
+        "gemini-3.5-flash-lite",
+        "gemini-3.5-flash-lite",
+        "gemini-3.5-flash-lite",
+        "gemini-3.5-flash-lite",
+        "gemini-3.5-flash-lite",
+        "gemini-3.8-flash",
+        "gemini-3.8-flash",
+        "gemini-3.8-flash",
+        "gemini-3.8-flash",
+        "gemini-3.8-flash",
+        "gemini-3.8-flash"
+      ],
+      "models_billed": [
+        "gemini-3.5-flash-lite",
+        "gemini-3.5-flash-lite",
+        "gemini-3.5-flash-lite",
+        "gemini-3.5-flash-lite",
+        "gemini-3.5-flash-lite",
+        "gemini-3.5-flash-lite",
+        "gemini-3.8-flash",
+        "gemini-3.8-flash",
+        "gemini-3.8-flash"
+      ],
+      "fallback_from": [],
+      "repaired_by": [
+        "model_reask",
+        "escalated:gemini-3.8-flash"
+      ],
+      "error": null,
+      "priced_usd": 0.014504,
+      "ledger_problems": []
+    },
+    {
+      "scenario": "fallback",
+      "forced": "Flash-Lite raises RetryableError on its 2nd turn, 3 tries",
+      "run_id": "ae2dfc47",
+      "ok": true,
+      "workers": 1,
+      "models_asked": [
+        "gemini-3.5-flash-lite",
+        "gemini-3.5-flash-lite",
+        "gemini-3.5-flash-lite",
+        "gemini-3.5-flash-lite",
+        "gemini-3.8-flash",
+        "gemini-3.8-flash",
+        "gemini-3.5-flash-lite",
+        "gemini-3.5-flash-lite"
+      ],
+      "models_billed": [
+        "gemini-3.5-flash-lite",
+        "gemini-3.8-flash",
+        "gemini-3.5-flash-lite",
+        "gemini-3.5-flash-lite"
+      ],
+      "fallback_from": [
+        "gemini-3.5-flash-lite"
+      ],
+      "repaired_by": null,
+      "error": null,
+      "priced_usd": 0.004292,
+      "ledger_problems": []
+    }
+  ]
+}

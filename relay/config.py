@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     gemini_max_output_tokens: int = (
         16000  # Gemini counts thinking inside this limit, so it sits above llm_max_tokens
     )
+    # P3 on Gemini: "" sends no thinking config, so each model uses its own default.
+    # Opt-in because the spelling differs by generation (see gemini_client.py).
+    gemini_thinking_level: Literal["", "low", "medium", "high"] = ""
     # Option A: how many real-AI runs ALL public visitors share per day. Counted
     # in Postgres, so the cap holds across workers and restarts. 0 = off.
     public_real_runs_per_day: int = 30

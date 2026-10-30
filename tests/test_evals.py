@@ -92,7 +92,7 @@ def test_summary_separates_accuracy_from_precision() -> None:
 
 
 # ── the judge, through a mock Gemini transport ───────────────────────────
-JUDGE_MODEL = "gemini-3.8-flash"
+JUDGE_MODEL = "gemini-3.5-flash-lite"
 
 
 def judge_with(
@@ -138,8 +138,8 @@ def test_judge_asks_for_a_schema_constrained_verdict_and_prices_it() -> None:
         "different",
         "unsure",
     ]
-    # priced at 3.8 Flash's paid rate; thinking counts as output
-    assert judge.calls == 1 and judge.cost_usd == pytest.approx((300 * 0.75 + 40 * 3.75) / 1e6)
+    # priced at Flash-Lite's paid rate; thinking counts as output
+    assert judge.calls == 1 and judge.cost_usd == pytest.approx((300 * 0.30 + 40 * 2.50) / 1e6)
 
 
 def test_judge_without_a_key_refuses_before_any_call(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -159,7 +159,30 @@ def test_a_refused_judge_call_says_why_without_quoting_the_key() -> None:
     judge, _ = judge_with(400)
     assert judge.same("a", "b") is None
     assert judge.calls == 0 and judge.cost_usd == 0  # the API refused: nothing was metered
-    assert judge.errors[0].startswith("400") and "test-not-a-real-key" not in judge.errors[0]
+    assert "400" in judge.errors[0] and "test-not-a-real-key" not in judge.errors[0]
+
+
+def test_a_transient_503_is_retried_like_any_model_call() -> None:
+    """Measured on 3.8 Flash: 503 "high demand". One blip must not cost a verdict."""
+    replies = [
+        httpx2.Response(503, json={"error": {"code": 503, "message": "high demand"}}),
+        httpx2.Response(
+            200,
+            json={
+                "candidates": [
+                    {
+                        "content": {"parts": [{"text": '{"verdict": "same", "reason": "x"}'}]},
+                        "finishReason": "STOP",
+                    }
+                ],
+                "usageMetadata": {"promptTokenCount": 300, "candidatesTokenCount": 30},
+            },
+        ),
+    ]
+    client = httpx2.Client(transport=httpx2.MockTransport(lambda _r: replies.pop(0)))
+    judge = IndustryJudge(JUDGE_MODEL, client=client, api_key="test-not-a-real-key")
+    assert judge.same("a", "b") is True
+    assert judge.calls == 1 and judge.errors == []
 
 
 @pytest.mark.parametrize(

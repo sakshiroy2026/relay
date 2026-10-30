@@ -361,3 +361,32 @@ Retry-After, nothing created), because waiting is free while nothing exists and
 a worker sleeping mid-call holds a lease it isn't using. Headline proof: run
 39d7666b, killed at step 3, resumed by vm:3180 at step 4, finished clean — which
 only works because the replayed thoughtSignatures were accepted.
+
+## P5 and the eval judge on Gemini (30 Oct)
+Built by Claude Code; see learn/P5_GEMINI.md. Explain-back owed.
+
+Gemini runs had no rung 3 and no fallback, because both named Claude models. Each
+provider now has its own pair (Gemini: 3.5 Flash-Lite -> 3.8 Flash), and the factory
+drops an id from the other family. The eval judge moved from the Anthropic SDK to
+Gemini through the adapter's generate(), so it shares key handling, errors and retries.
+No new dependency.
+
+The real check (30 Oct, free tier, $0, 35 requests, local Postgres). Two probes (9
+requests): 3.8 Flash works on the free tier and accepts Flash-Lite's thought signatures
+both after a correction and mid-turn. Three runs with the failures forced
+(scripts/escalation_smoke.py, 26 requests): 6b9f9aee rescued at rung 3; a2d1fb52 the
+same with a worker dying before the escalated call and a second one staying on 3.8
+Flash; ae2dfc47 one fallback turn, then back to Flash-Lite. All three ledgers clean.
+
+What the real calls found that tests could not. (1) 3.8 Flash is slow and often busy:
+47 s and a 60 s timeout in the probes, a 503 on the judge, and 5 of 11 requests retried
+in the runs. So the judge's default went to Flash-Lite, the judge got its retries back,
+and it now records why a call gave no verdict. (2) Timed-out retries can outlast a
+90 s lease, so the loop heartbeats before a fallback; between retries it still doesn't
+(fencing keeps the ledger right, the requests are wasted).
+
+Also fixed: three test_gemini_client tests failed for the first hour after midnight
+Pacific, because park() backdated runs an hour, out of the quota day.
+
+Not verified: a failure the model made by itself, a real outage, kill -9 of a real
+worker on this path, Render or Neon, real tools, the judge in a full eval run.

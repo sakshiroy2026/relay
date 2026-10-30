@@ -7,7 +7,10 @@ WHAT IT IS  The first real check. Creates N runs for a 'live' tenant (real model
             same on Gemini's free tier, where the costs below are what the run
             WOULD have cost on the paid tier; the invoice is $0).
 GOES IN     python -m scripts.live_smoke --yes-spend [--runs 3] [--max-total-usd 0.10]
-                [--domains razorpay.com,stripe.com]
+                [--domains razorpay.com,stripe.com] [--mode public_real] [--gap-seconds 45]
+            --mode public_real uses the real model with the FAKE tools: measures
+            the model's own cost and caching with no Tavily credits spent.
+            --gap-seconds spaces the runs for the free tier's per-minute limit.
             Needs the live provider's key in the environment (GEMINI_API_KEY,
             or ANTHROPIC_API_KEY while LLM_PROVIDER names Anthropic), plus
             TAVILY_API_KEY for real search, and a database at migration 008+.
@@ -61,8 +64,8 @@ def live_tenant() -> uuid.UUID:
     return row[0]
 
 
-def create_live_run(tenant_id: uuid.UUID, domain: str) -> str:
-    payload = {"domain": domain, "mode": "live"}
+def create_live_run(tenant_id: uuid.UUID, domain: str, mode: str = "live") -> str:
+    payload = {"domain": domain, "mode": mode}
     with pool.connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -114,10 +117,12 @@ def main() -> None:
     parser.add_argument("--runs", type=int, default=3)
     parser.add_argument("--max-total-usd", type=float, default=0.10)
     parser.add_argument("--domains", default="razorpay.com,stripe.com,anthropic.com")
+    parser.add_argument("--mode", choices=["live", "public_real"], default="live")
+    parser.add_argument("--gap-seconds", type=float, default=0.0)
     args = parser.parse_args()
 
     domains = [d.strip() for d in args.domains.split(",") if d.strip()]
-    provider, _tools = resolve_mode("live")
+    provider, tools = resolve_mode(args.mode)
     model = planner_model(provider)
     est = args.runs * estimate(model, *EST_TOKENS)
     free = provider in FREE_TIER_PROVIDERS
@@ -148,7 +153,9 @@ def main() -> None:
             if spent >= args.max_total_usd:
                 print(f"stopping: ${spent:.4f} spent, cap ${args.max_total_usd:.2f}")
                 break
-            run_id = create_live_run(tenant, domains[i % len(domains)])
+            if i and args.gap_seconds:
+                time.sleep(args.gap_seconds)
+            run_id = create_live_run(tenant, domains[i % len(domains)], args.mode)
             wait_terminal([run_id], timeout_s=300)
             line = summarize_run(run_id)
             spent += line["cost_usd"]
@@ -170,7 +177,8 @@ def main() -> None:
             "model": model,
             "effort": settings.llm_effort,
             "prompt_cache": settings.llm_prompt_cache,
-            "tools_provider": "real",
+            "gemini_thinking_level": settings.gemini_thinking_level,
+            "tools_provider": tools,
             "per_run_budget_usd": settings.live_run_budget_usd,
         },
         "runs": lines,

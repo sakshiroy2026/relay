@@ -118,6 +118,20 @@ def test_the_system_prompt_rides_in_system_instruction() -> None:
     )
 
 
+def test_thinking_level_is_opt_in_and_only_for_3x_models(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    api = FakeAPI()
+    api.client().call(MODEL, "sys", MESSAGES, TOOL_SCHEMAS)
+    assert "thinkingConfig" not in api.bodies[-1]["generationConfig"]  # P7's request, unchanged
+
+    monkeypatch.setattr(settings, "gemini_thinking_level", "low")
+    api.client().call(MODEL, "sys", MESSAGES, TOOL_SCHEMAS)
+    assert api.bodies[-1]["generationConfig"]["thinkingConfig"] == {"thinkingLevel": "low"}
+    api.client().call("gemini-2.5-flash", "sys", MESSAGES, TOOL_SCHEMAS)
+    assert "thinkingConfig" not in api.bodies[-1]["generationConfig"]  # a different spelling
+
+
 def test_roles_and_tool_results_become_gemini_contents() -> None:
     contents = to_api_contents(
         [

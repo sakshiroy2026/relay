@@ -15,7 +15,7 @@ company per line:
 
 Scoring (`scoring.py`): `name` and `hq_country` are normalized (legal suffixes,
 country aliases), `founded_year` and the two enums must match exactly, `industry`
-is judged by an LLM (`judge.py`, Gemini 3.8 Flash, free tier) or, without a judge, by word overlap
+is judged by an LLM (`judge.py`, Gemini 3.5 Flash-Lite, free tier) or, without a judge, by word overlap
 (the results say which). A field the agent put in `flagged_fields` counts as
 **abstained**, not wrong. **Accuracy** = correct / scored; **precision** =
 correct / answered (the "when it answers, is it right?" number).

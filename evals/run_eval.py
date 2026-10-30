@@ -10,7 +10,7 @@ WHAT IT IS  The eval loop: one run per hand-labelled company, scored field by
                      without --yes-spend, prints the estimate first, and stops
                      creating runs at --max-total-usd.
 GOES IN     python -m evals.run_eval --golden evals/golden.jsonl --mode live --yes-spend
-                [--judge-model gemini-3.8-flash | --no-judge] [--workers 2]
+                [--judge-model gemini-3.5-flash-lite | --no-judge] [--workers 2]
                 [--max-total-usd 1.0]
             Labels: one JSON object per line, {"domain", "expected": {field: value
             or null}, "notes"?} (format: evals/README.md).
@@ -45,10 +45,10 @@ from relay.llm.factory import planner_model, resolve_mode
 
 HERE = Path(__file__).parent
 # Priced at Google's PAID rates (the free tier bills $0): a measured Flash-Lite
-# run was $0.003 (b0a3aea7); one short 3.8-Flash comparison is ~$0.001. The
+# run was $0.003 (b0a3aea7); one short Flash-Lite comparison is ~$0.0002. The
 # results record the real figures.
 EST_RUN_USD = 0.005
-EST_JUDGE_USD = 0.001
+EST_JUDGE_USD = 0.0002
 
 
 def load_labels(path: Path) -> list[dict[str, Any]]:

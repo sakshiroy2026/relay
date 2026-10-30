@@ -12,25 +12,28 @@ COMES OUT   True / False, or None when the judge is unsure or unavailable (the
             `cost_usd` accumulate, for the results file — priced at Google's
             PAID rate like every Gemini call, though the free tier bills $0.
             `errors` says why a call gave no verdict (never a header or the key).
-TOUCHES     The Gemini API over httpx2, the same way relay/llm/gemini_client.py
-            does: the key comes from GEMINI_API_KEY and goes in the
-            `x-goog-api-key` header, never the URL, never a log.
+TOUCHES     The Gemini API through GeminiLLMClient.generate(), so the key handling
+            (GEMINI_API_KEY, `x-goog-api-key` header) and the error mapping are
+            the adapter's own. Transient trouble is retried like any model call.
 FAILS WHEN  No GEMINI_API_KEY -> RuntimeError at construction, before any call.
             Never raises for API trouble: an unavailable judge returns None.
 """
 
 import json
-import os
 from typing import Any
 
 import httpx2
 
+from relay.core.retry import FatalError, RetryableError, call_with_retries
 from relay.llm.client import Response
-from relay.llm.gemini_client import API_ROOT, error_text, usage_tokens
+from relay.llm.gemini_client import GeminiLLMClient, usage_tokens
 from relay.llm.pricing import assert_priced, price
 
-DEFAULT_MODEL = "gemini-3.8-flash"  # stronger than the agent's flash-lite, still free tier
+# Measured 30 Oct 2026: Flash-Lite answered in 1.2 s; 3.8 Flash returned 503 "high
+# demand" on the same request. Comparing two labels doesn't need the stronger model.
+DEFAULT_MODEL = "gemini-3.5-flash-lite"
 MAX_OUTPUT_TOKENS = 4000  # Gemini counts thinking inside this; a verdict is ~50 tokens
+RETRY_ATTEMPTS = 3
 
 PROMPT = """You compare two short labels describing a company's industry.
 Hand label (ground truth): {expected}
@@ -61,12 +64,8 @@ class IndustryJudge:
         api_key: str | None = None,
     ) -> None:
         assert_priced(model)  # a judge whose calls can't be priced can't be budgeted
-        key = api_key or os.environ.get("GEMINI_API_KEY") or ""
-        if not key:
-            raise RuntimeError("GEMINI_API_KEY is not set: the judge cannot run")
         self.model = model
-        self.client = client or httpx2.Client(timeout=60)
-        self._headers = {"x-goog-api-key": key, "Content-Type": "application/json"}
+        self.llm = GeminiLLMClient(client=client, api_key=api_key)
         self.calls = 0
         self.cost_usd = 0.0
         self.reasons: list[dict[str, Any]] = []
@@ -87,18 +86,12 @@ class IndustryJudge:
             },
         }
         try:
-            response = self.client.post(
-                f"{API_ROOT}/models/{self.model}:generateContent",
-                json=payload,
-                headers=self._headers,
+            body, _ = call_with_retries(
+                lambda: self.llm.generate(self.model, payload), attempts=RETRY_ATTEMPTS
             )
-        except httpx2.RequestError as exc:
-            self.errors.append(type(exc).__name__)
+        except (RetryableError, FatalError) as exc:  # never metered: no reply came back
+            self.errors.append(str(exc))
             return None
-        if response.status_code != 200:  # never metered when the API refused the request
-            self.errors.append(error_text(response))
-            return None
-        body: dict[str, Any] = response.json()
         self.calls += 1
         uncached, cached, output = usage_tokens(body)
         self.cost_usd += price(
