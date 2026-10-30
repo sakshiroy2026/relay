@@ -340,7 +340,7 @@ function waiting(text) {
   $("realaiWait").textContent = text || "";
   $("realaiWait").classList.toggle("on", !!text);
 }
-loadConfig();
+const configReady = loadConfig();
 $("key").addEventListener("change", () => saveKey($("key").value.trim()));
 $("forget").addEventListener("click", () => { $("key").value = ""; saveKey(""); });
 
@@ -669,9 +669,10 @@ async function stream() {
   }
 }
 
-// reopen the run in the URL (#run=<id>) after a page refresh
+// reopen the run in the URL (#run=<id>) after a page refresh. A first-time visitor's
+// key arrives with the config, so wait for it; a run started meanwhile keeps the page.
 const m = location.hash.match(/run=([0-9a-f-]{36})/);
-if (m) { reset(m[1]); stream(); }
+if (m) { reset(m[1]); configReady.then(() => { if (runId === m[1]) stream(); }); }
 </script>
 </body>
 </html>

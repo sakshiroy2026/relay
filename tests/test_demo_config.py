@@ -57,3 +57,12 @@ def test_a_wrong_key_is_not_offered(monkeypatch: pytest.MonkeyPatch, db: None) -
     monkeypatch.setattr(main_mod.settings, "public_demo_key", "rly_nope.nope")
     body = TestClient(app).get("/demo-config").json()
     assert body["demo_key"] is None and body["real_ai_runs_left"] == 0
+
+
+def test_a_saved_run_link_waits_for_the_config() -> None:
+    # A first-time visitor's key arrives with /demo-config: streaming the run in
+    # the URL before that answers 401 and shows "API key missing".
+    page = TestClient(app).get("/").text
+    assert "const configReady = loadConfig();" in page
+    saved_link = page[page.index("location.hash.match") :]
+    assert saved_link.index("configReady.then") < saved_link.index("stream()")
