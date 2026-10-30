@@ -46,7 +46,7 @@ Instead of an agent loop living in a process that dies when the process dies, ev
 | Real model provider — **Google Gemini on the free tier** (`gemini-3.5-flash-lite` by default, raw REST over the HTTP client already in the image; reply parts replayed verbatim so `thoughtSignature`s stay valid across crashes; per-day quota 429 separated from per-minute) | ✅ **working on real calls** — 5 real runs incl. one killed mid-run and resumed by a second worker (run ids below); 46 tests with a mock transport ($0 and offline) — details: [`learn/P7_GEMINI.md`](learn/P7_GEMINI.md) |
 | Public **"Run with real AI"** toggle: 30 real-AI runs/day shared by all visitors, counted in Postgres inside the existing per-tenant advisory lock; over the cap the run quietly uses the demo model and says so; runs spaced 45 s apart for the free tier's per-minute quota; real model + **canned** tools, so no visitor picks a URL this server fetches | ✅ built and exercised end to end (migration 010 = one partial index) — details: [`learn/P7_GEMINI.md`](learn/P7_GEMINI.md) |
 | Claude adapter (Haiku 5.5 via the official SDK, thinking blocks replayed verbatim; rung-3 escalation to Sonnet 5.5) | ✅ built and tested through the SDK with a mock transport ($0); **unused — no Anthropic key**, kept for the day there is one (details: [`learn/P1_REAL_MODEL.md`](learn/P1_REAL_MODEL.md)) |
-| Eval harness: field scoring vs a hand-labelled golden set, Gemini Flash-Lite judge for `industry`, accuracy + precision (flagging = abstaining), CI gate on committed live results | ✅ built and run live on 20 labelled companies: 0.84 on the factual fields, 0.83 overall (0.75 under the judge's first rule) (details: [`learn/P6_EVAL.md`](learn/P6_EVAL.md), [`learn/P6_LIVE_EVAL.md`](learn/P6_LIVE_EVAL.md); judge moved to Gemini: [`learn/P5_GEMINI.md`](learn/P5_GEMINI.md)) |
+| Eval harness: field scoring vs a hand-labelled golden set, Gemini Flash-Lite judge for `industry`, accuracy + precision (flagging = abstaining), CI gate on committed live results | ✅ built and run live on 20 labelled companies: 0.85 on the factual fields, 0.83 overall (0.75 under the judge's first rule) (details: [`learn/P6_EVAL.md`](learn/P6_EVAL.md), [`learn/P6_LIVE_EVAL.md`](learn/P6_LIVE_EVAL.md); judge moved to Gemini: [`learn/P5_GEMINI.md`](learn/P5_GEMINI.md)) |
 | CI (GitHub Actions: ruff, mypy, all tests on Postgres 16, eval gate; no secrets, no paid calls) | ✅ added |
 | Public deployment | ✅ **live at [relay-sakshi.onrender.com](https://relay-sakshi.onrender.com)** (Render free plan: one container with API + 2 workers, Neon; visitors get a free demo-tenant key, never a paid one; first visit after idle takes ~1 min to wake — [`learn/DEPLOY_RENDER.md`](learn/DEPLOY_RENDER.md)). The Oracle VM path ([`learn/DEPLOY.md`](learn/DEPLOY.md)) stays for a future always-on server |
 
@@ -56,11 +56,11 @@ Instead of an agent loop living in a process that dies when the process dies, ev
 
 **Accuracy on real companies (first live eval, 30 Oct 2026, local Postgres, Gemini free tier, $0 billed).**
 20 hand-researched companies, real model (`gemini-3.5-flash-lite`) + real tools (Tavily, the
-pinned fetcher): 20/20 runs succeeded. **0.84 (81/96) on the factual fields**: `hq_country` 0.95, `name`
-0.90, `founded_year` 0.84, `funding_stage` 0.82, `employee_range` 0.70. **Overall 0.83 (96/116)** with
+pinned fetcher): 20/20 runs succeeded. **0.85 (83/98) on the factual fields**: `hq_country` 0.95, `name`
+0.90, `founded_year` 0.84, `funding_stage` 0.84, `employee_range` 0.70. **Overall 0.83 (98/118)** with
 the free-text `industry` field at 0.75, judged by an LLM. **That rule was changed after seeing the first
 score:** the original rule gave `industry` 0.30 and 0.75 overall, by rejecting answers that plainly fit.
-Two "same" verdicts under the new rule look generous, so read overall as 0.81-0.83. 3 funding labels are
+Two "same" verdicts under the new rule look generous, so read overall as 0.81-0.83. 1 funding label (Atlassian) is
 not scored yet, and the precision goal first assumed (0.85) is not met. 4 of 21 real runs were rescued by
 the repair ladder's re-ask; the agent never used its flagging path. $0.0079 a run at Google's paid rate.
 Every field, run id and both sets of verdicts: [`evals/results.json`](evals/results.json); how to read the
@@ -293,6 +293,6 @@ Planned: Grafana + an OTLP collector (the config file is in the repo), Caddy, AW
 
 Currently implements durable execution, lease-based claiming with fencing, transcript replay, tool-level idempotency with a database backstop, full per-tenant API keys with rate and concurrency limits, a per-run budget, a repair ladder and dead-letter queue, a live demo page, and measured chaos-harness results.
 
-Next: the last 3 funding labels, make the agent flag what it can't source, and compare thinking levels on the same labels (cost measured: [`learn/P3_GEMINI.md`](learn/P3_GEMINI.md)).
+Next: the last funding label (Atlassian), make the agent flag what it can't source, and compare thinking levels on the same labels (cost measured: [`learn/P3_GEMINI.md`](learn/P3_GEMINI.md)).
 
 Per-tool circuit breakers and retry-with-backoff landed with Day 8, the idempotency / fencing / throughput test suites with Day 16, the schema repair ladder + dead-letter queue with Day 9, and Prometheus metrics + OpenTelemetry tracing + the `/ops` dashboard with Day 17. Rung 3 (escalating to a stronger model) and the model fallback are built behind budget guards (P5); Grafana and the OTLP collector come with deployment.

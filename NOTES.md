@@ -453,3 +453,11 @@ page showed it correctly. Its record listed a page the run never opened, and fla
 The ledger now settles that: `unread_sources()` names the sources a `public_real` run never opened,
 and the page labels the record "Not researched". No new dependency, no prompt change, no real calls
 to build it. Not checked: the label on a real run on Render.
+
+## Stripe and Canva funding labels (30 Oct)
+See learn/P6_LIVE_EVAL.md section 4.
+
+The owner answered two of the three open funding labels from funding tables: Stripe Series I, Canva
+Series F (Tracxn), both `series_d+`. Re-scored from saved records and saved verdicts, 0 requests. Both
+matched: factual fields 83/98 (0.85), overall 98/118 (0.83), first judge rule 89/118 (0.75). Atlassian
+is still out of scoring: its last round is Series D, but 2015 news reports a Nasdaq listing.

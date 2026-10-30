@@ -11,8 +11,8 @@ Now it can: 20 companies, hand-researched, graded field by field.
 ```
 hand labels (golden.jsonl) ---------------+
                                           v
-20 real runs -> records -> scorer + judge -> 96 / 116 correct -> results.json -> CI gate
-                                     (87 / 116 under the judge's first rule)
+20 real runs -> records -> scorer + judge -> 98 / 118 correct -> results.json -> CI gate
+                                     (89 / 118 under the judge's first rule)
 ```
 
 **The exam analogy.** A mark depends on three things: the student, the answer key and the
@@ -24,7 +24,7 @@ Both marks are kept, because a mark that moved after someone saw it needs explai
 
 | File | One line |
 |---|---|
-| `evals/golden.jsonl` | the answer key: 20 companies, 116 scored fields, sources in `notes` |
+| `evals/golden.jsonl` | the answer key: 20 companies, 118 scored fields, sources in `notes` |
 | `evals/run_eval.py` | spaces live runs, stops at `--max-requests`, stops on a daily-quota error, counts only scored runs as `labels` |
 | `evals/scoring.py` | `hq_country` may be a list (dual HQ); `funding_stage: "unknown"` counts as no answer |
 | `evals/judge.py` | the clearer `industry` rule; keeps the judge's stated reason for each verdict |
@@ -53,16 +53,22 @@ paid rate: $0.0079 a run. All run ids: `evals/results.json`.
 | `hq_country` | 19/20 | 0.95 |
 | `name` | 18/20 | 0.90 |
 | `founded_year` | 16/19 | 0.84 |
-| `funding_stage` | 14/17 | 0.82 |
+| `funding_stage` | 16/19 | 0.84 |
 | `industry`, clearer rule | 15/20 | 0.75 |
 | `employee_range` | 14/20 | 0.70 |
-| **Overall, clearer rule** | **96/116** | **0.83** |
-| **Without `industry`** (no judge involved) | **81/96** | **0.84** |
-| Overall, the first rule (`industry` 6/20 = 0.30) | 87/116 | 0.75 |
+| **Overall, clearer rule** | **98/118** | **0.83** |
+| **Without `industry`** (no judge involved) | **83/98** | **0.85** |
+| Overall, the first rule (`industry` 6/20 = 0.30) | 89/118 | 0.75 |
 
 Precision equals accuracy because the agent never abstained (section 7).
 
-**Left out of scoring**, waiting on the owner: the funding stage of Atlassian, Stripe and Canva.
+**Added after the run, with no requests:** the funding stage of Stripe (Series I, Apr 2024) and Canva
+(Series F, May 2024, Tracxn), both `series_d+`, answered by the owner from funding tables without being
+shown the agent's answers. Both matched, which moved the factual fields from 81/96 (0.84) to 83/98 (0.85)
+and left overall at 0.83.
+
+**Left out of scoring**, waiting on the owner: Atlassian's funding stage. The owner's source lists Series D
+(2014) as its last round, and 2015 news reports a Nasdaq listing, so it could be `series_d+` or `public`.
 
 ## 5. The judge: what changed, and how far to trust it
 
@@ -81,7 +87,7 @@ all from different to same, and left 5 pairs different.
 | **Generous** | OpenAI: "Artificial Intelligence" against "Generative AI" | the answer is *broader* than the label; the judge's own reason has it backwards |
 
 Atlassian's "Software" against "proprietary software company" was marked same under both rules, for the
-same backwards reason. **Without those two, `industry` is 13/20 (0.65) and overall 94/116 (0.81).** The
+same backwards reason. **Without those two, `industry` is 13/20 (0.65) and overall 96/118 (0.81).** The
 verdicts were left as the judge gave them, not corrected by hand, so call it 0.81-0.83.
 
 No negative controls were run: pairs that should obviously fail, to test the new rule on purpose.
@@ -155,7 +161,7 @@ This sorting is a judgement call from the outputs alone, not a verified re-check
 
 1. Only the marking of one free-text field. The first rule failed answers that plainly fit, so the rule
    was made clearer and the same saved answers were re-judged. Say it was changed after seeing the score,
-   give both numbers, and point to 0.84 on the factual fields, which no judge touches.
+   give both numbers, and point to 0.85 on the factual fields, which no judge touches.
 2. Two "same" verdicts look too generous: the answer was broader than the label, and the judge's reason
    had the rule backwards. They weren't corrected by hand, so the top number stands, but you know about them.
 3. Wrong is a claim that doesn't match; abstained is a field the agent explicitly flagged. It never
@@ -170,7 +176,7 @@ This sorting is a judgement call from the outputs alone, not a verified re-check
 
 ## 12. Interview lines
 
-- "I hand-labelled 20 companies and scored the agent field by field: 0.84 on the factual fields, and 0.83
+- "I hand-labelled 20 companies and scored the agent field by field: 0.85 on the factual fields, and 0.83
   overall once the free-text industry field is included."
 - "The first industry judge scored 0.30 because it rejected answers that plainly fit. I fixed the rule,
   but that's a change made after seeing a score, so I kept both numbers and checked the new verdicts.
