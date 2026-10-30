@@ -1,0 +1,8 @@
+{
+ "run_id": "70daab6a-b04b-4b66-a333-5f6b3eeae76c",
+ "step_index": 1,
+ "kind": "error",
+ "reason": "model_fatal",
+ "detail": "model daily quota exhausted (429: RESOURCE_EXHAUSTED You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \n* Quota exceeded for metric: genera)",
+ "source": "the ledger row on Neon, read 30 Oct 2026; the adapter cuts this text at 300 characters"
+}

@@ -379,13 +379,17 @@ Proof: [`34d9af78` screenshot](img/render-label-34d9af78.jpg) and [ledger](proof
 `gemini-3.8-flash` on Render was tried once, and it did not pass. `70daab6a` (stripe.com, no kill,
 `GEMINI_MODEL` set to 3.8 Flash, 30 Oct) ended with `model_fatal` about 82 s after it started: no
 `model_call` row, 0 tokens, `attempt_count` 2. So a second worker took over with no kill, but the
-ledger can't say whether that was the 15 s lease running out or a redeploy. The error's text is in
-the ledger row, which the API doesn't return, so the cause isn't known here yet. Proof:
+ledger can't say whether that was the 15 s lease running out or a redeploy. The cause is the free
+tier: the error step reads "model daily quota exhausted (429: RESOURCE_EXHAUSTED ...". The adapter
+treated it as fatal on purpose, so the run ended honestly instead of retrying. That text is cut at
+300 characters, before it names the metric or the model, so the limit itself isn't known. Flash-Lite
+had answered on Render 8 minutes earlier (`34d9af78`). Proof:
 [running](img/render-38flash-running-70daab6a.jpg), [failed](img/render-38flash-failed-70daab6a.jpg),
-[ledger](proofs/render-70daab6a.json).
+[ledger](proofs/render-70daab6a.json), [error text](proofs/render-70daab6a-error.json).
 
-Not checked: why `a8bee82e` stopped, why `70daab6a` failed, and any successful `gemini-3.8-flash` run
-on Render. That path has still only worked locally, with forced failures.
+Not checked: why `a8bee82e` stopped, which worker event caused the takeover in `70daab6a`, and any
+successful `gemini-3.8-flash` run on Render. A 429 shows the request reached Google, not that the
+model answers there. That path has still only worked locally, with forced failures.
 
 ## 10. Interview lines
 

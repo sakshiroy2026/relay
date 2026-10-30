@@ -455,6 +455,8 @@ and the page labels the record "Not researched". No new dependency, no prompt ch
 to build it. Checked on a real run on Render: `34d9af78` stripe.com named `https://stripe.com/about`,
 which it asked for and got a canned 404. The attempt before it, `a8bee82e`, failed with `model_stopped`
 and no record; the ledger doesn't keep Gemini's finish reason, so the cause is unknown.
+`gemini-3.8-flash` hasn't passed on Render: `70daab6a` hit the free tier's daily quota (429) and got no
+model reply, so a successful run there is still unproven.
 
 ## The last funding labels: Stripe, Canva, Atlassian (30 Oct)
 See learn/P6_LIVE_EVAL.md section 4.

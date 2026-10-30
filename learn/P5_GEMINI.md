@@ -105,8 +105,8 @@ in the probes). The retries are what got these runs through.
 - The fallback during a real Google outage.
 - The "kill" here is an exception in-process, not `kill -9` of a worker process.
 - Any of this on Render or Neon, or with real tools. A direct try of 3.8 Flash on Render, `70daab6a`
-  on 30 Oct, ended with `model_fatal` and no model reply (`learn/P7_GEMINI.md` section 9).
-- Gemini's per-day limit for 3.8 Flash.
+  on 30 Oct, hit the free tier's daily quota and got no model reply (`learn/P7_GEMINI.md` section 9).
+- Gemini's per-day limit for 3.8 Flash. `70daab6a` ran into a daily limit, but the number is unknown.
 
 **After the merge:** a public real-AI run that fails validation twice can now call 3.8
 Flash. It's free tier and budget-capped, but it uses the same Google quota.
