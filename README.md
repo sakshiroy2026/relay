@@ -277,6 +277,6 @@ Planned: Grafana + an OTLP collector (the config file is in the repo), Caddy, AW
 
 Currently implements durable execution, lease-based claiming with fencing, transcript replay, tool-level idempotency with a database backstop, full per-tenant API keys with rate and concurrency limits, a per-run budget, a repair ladder and dead-letter queue, a live demo page, and measured chaos-harness results.
 
-Next, in order: the first paid runs on the real model (built: P1, P3, P5), public deployment (config ready), then Sakshi's hand-labelled golden dataset for the eval harness (built: P6, gated in CI).
+Next: the hand-labelled golden dataset, then the first live eval run (harness built: P6, gated in CI), which also decides the thinking level (measured for cost: [`learn/P3_GEMINI.md`](learn/P3_GEMINI.md)).
 
 Per-tool circuit breakers and retry-with-backoff landed with Day 8, the idempotency / fencing / throughput test suites with Day 16, the schema repair ladder + dead-letter queue with Day 9, and Prometheus metrics + OpenTelemetry tracing + the `/ops` dashboard with Day 17. Rung 3 (escalating to a stronger model) and the model fallback are built behind budget guards (P5); Grafana and the OTLP collector come with deployment.

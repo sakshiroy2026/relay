@@ -67,6 +67,16 @@ project and never ask Sakshi for a card. "Free" still costs *quota*, so the
 rule stands: state the request count and wait for her "go" before any real
 call.
 
+## Since P7 (30 Oct 2026, branch `p5-gemini`)
+
+Built and verified: P5 on Gemini (Flash-Lite -> 3.8 Flash, `learn/P5_GEMINI.md`), the eval
+judge on Gemini (default Flash-Lite), the P3 measurements (`learn/P3_GEMINI.md`,
+`GEMINI_THINKING_LEVEL` stays unset until the eval compares accuracy), and the first real
+Tavily search and fetch (end of `learn/REAL_TOOLS.md`). 269 tests. The Anthropic numbers in
+"The paid phase" below are history: the remaining real work is the eval.
+Real-call harnesses on the local test database: mark leftover `pending` / `running` rows
+`dead` first, or workers can stall on what pytest left behind.
+
 ## Where things stood before P7
 
 `main` has everything up to PR #2 (Days 16, 9, 10, 17, 11, the client
