@@ -443,11 +443,89 @@ def test_live_mode_without_a_key_fails_the_run_not_the_worker(
     assert last["kind"] == "error" and last["payload"]["reason"] == "model_misconfigured"
 
 
-def test_gemini_runs_never_escalate_to_a_claude_model() -> None:
-    """ESCALATION_MODEL / FALLBACK_MODEL are Claude ids: a Gemini run can't call them."""
-    assert factory.escalation_allowed("anthropic") is True
-    assert factory.escalation_allowed("gemini") is False
+def test_each_provider_escalates_only_inside_its_own_family(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """P5 on Gemini: a Gemini run gets its own pair; a Claude id is never handed to it."""
+    assert factory.escalation_model("gemini") == "gemini-3.8-flash"
+    assert factory.fallback_model("gemini") == "gemini-3.8-flash"
+    assert factory.escalation_model("anthropic") == "claude-sonnet-5-5"
+    assert factory.escalation_model("fake") == "" and factory.fallback_model("fake") == ""
     assert factory.resolve_mode("public_real") == ("gemini", "fake")
+
+    monkeypatch.setattr(factory.settings, "gemini_escalation_model", "claude-sonnet-5-5")
+    monkeypatch.setattr(factory.settings, "fallback_model", "gemini-3.8-flash")
+    assert factory.escalation_model("gemini") == ""  # cross-family: off, not attempted
+    assert factory.fallback_model("anthropic") == ""
+    warnings = factory.preflight()
+    assert any("'claude-sonnet-5-5' is not a gemini model" in w for w in warnings)
+
+
+LITE, FLASH = MODEL, "gemini-3.8-flash"
+BROKEN = json.dumps({**_FINAL_RECORD, "founded_year": 1599})  # valid JSON, invalid value
+
+
+def ladder_api(strong_answer: str) -> FakeAPI:
+    """Flash-Lite always answers BROKEN, with a signed thought; 3.8 Flash `strong_answer`."""
+    api = FakeAPI()
+
+    def answer(body: dict[str, Any]) -> httpx2.Response:
+        model = api.urls[-1].split("/models/")[1].split(":")[0]
+        turn = sum(1 for c in body["contents"] if c["role"] == "model")
+        text = BROKEN if model == LITE else strong_answer
+        parts: list[dict[str, Any]] = [
+            {"text": "(checking)", "thought": True, "thoughtSignature": f"{model}-sig-{turn}"},
+            {"text": text},
+        ]
+        return httpx2.Response(200, json=reply(parts, "STOP"))
+
+    api.answer = answer
+    return api
+
+
+def test_rung_3_on_gemini_asks_3_8_flash_with_the_history_verbatim(
+    parked_run: tuple[uuid.UUID, str], real_model: FakeAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Through the real adapter: the third request goes to 3.8 Flash, append-only."""
+    from scripts.check_run import find_problems, load_steps
+
+    api = ladder_api(json.dumps(_FINAL_RECORD))
+    monkeypatch.setitem(factory._clients, "gemini", api.client())
+    run_id, domain = parked_run
+
+    result = run_agent(run_id, domain, "w", lambda: True, budget_usd=1.0, mode="public_real")
+
+    assert result is not None and result["founded_year"] == _FINAL_RECORD["founded_year"]
+    assert [u.split("/models/")[1] for u in api.urls] == [
+        f"{LITE}:generateContent",
+        f"{LITE}:generateContent",  # rung 2: the re-ask, same model
+        f"{FLASH}:generateContent",  # rung 3: the stronger model
+    ]
+    first, second, third = api.bodies
+    assert third["contents"][: len(second["contents"])] == second["contents"]
+    assert third["systemInstruction"] == first["systemInstruction"]
+    # Flash-Lite's signed turns reach 3.8 Flash byte-for-byte (P7's replay rule)
+    signed = [c["parts"][0]["thoughtSignature"] for c in third["contents"] if c["role"] == "model"]
+    assert signed == [f"{LITE}-sig-0", f"{LITE}-sig-1"]
+    steps = load_steps(str(run_id))
+    final = next(s["payload"] for s in steps if s["kind"] == "final")
+    assert final["repaired_by"] == ["model_reask", f"escalated:{FLASH}"]
+    assert find_problems(steps) == []
+
+
+def test_a_claude_id_configured_for_gemini_is_never_called(
+    parked_run: tuple[uuid.UUID, str], real_model: FakeAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from scripts.check_run import load_steps
+
+    monkeypatch.setattr(factory.settings, "gemini_escalation_model", "claude-sonnet-5-5")
+    api = ladder_api(json.dumps(_FINAL_RECORD))
+    monkeypatch.setitem(factory._clients, "gemini", api.client())
+    run_id, domain = parked_run
+
+    assert run_agent(run_id, domain, "w", lambda: True, budget_usd=1.0, mode="public_real") is None
+    assert all(f"/models/{LITE}:" in u for u in api.urls) and len(api.urls) == 2
+    assert load_steps(str(run_id))[-1]["payload"]["reason"] == "invalid_final_answer"
 
 
 # ── Option A: the public real-AI opt-in ──────────────────────────────────
@@ -482,15 +560,18 @@ def park(tenant: dict[str, Any]) -> None:
     """Finish this tenant's runs and backdate them, as if the pacing gap had passed.
 
     The gap is measured from created_at, so a test that wants the NEXT run has to
-    move the clock rather than wait 45 real seconds.
+    move the clock rather than wait 45 real seconds. Only just past the gap: the
+    daily cap resets at midnight Pacific, so an hour back would drop the run out
+    of "today" during the first hour of every Pacific day.
     """
+    from relay.api import repo
     from relay.db import pool
 
     with pool.connection() as conn:
         conn.execute(
-            "UPDATE runs SET status = 'dead', created_at = created_at - interval '1 hour' "
-            "WHERE tenant_id = %s",
-            (tenant["id"],),
+            "UPDATE runs SET status = 'dead', "
+            "created_at = created_at - make_interval(secs => %s) WHERE tenant_id = %s",
+            (repo.PUBLIC_REAL_MIN_GAP_SECONDS + 1, tenant["id"]),
         )
 
 

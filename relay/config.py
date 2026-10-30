@@ -49,8 +49,12 @@ class Settings(BaseSettings):
     # in Postgres, so the cap holds across workers and restarts. 0 = off.
     public_real_runs_per_day: int = 30
     # ── P5: a stronger model as a last resort (real provider only; "" = off) ─
+    # One pair per provider: a run only ever escalates inside its own provider's
+    # family (factory.escalation_model() drops a cross-family id).
     escalation_model: str = "claude-sonnet-5-5"  # repair rung 3: one try after Haiku's re-ask fails
     fallback_model: str = "claude-sonnet-5-5"  # when the primary is still down after its retries
+    gemini_escalation_model: str = "gemini-3.8-flash"  # rung 3 for a Gemini run
+    gemini_fallback_model: str = "gemini-3.8-flash"  # a Gemini run's outage fallback
     # ── Retries + circuit breaker (Day 8) ───────────────────────
     breaker_threshold: int = 5  # consecutive failures before a tool's breaker opens
     # ── Repair ladder (Day 9) ───────────────────────────────────

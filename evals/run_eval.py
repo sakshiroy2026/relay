@@ -10,14 +10,15 @@ WHAT IT IS  The eval loop: one run per hand-labelled company, scored field by
                      without --yes-spend, prints the estimate first, and stops
                      creating runs at --max-total-usd.
 GOES IN     python -m evals.run_eval --golden evals/golden.jsonl --mode live --yes-spend
-                [--judge-model claude-sonnet-5-5 | --no-judge] [--workers 2]
+                [--judge-model gemini-3.8-flash | --no-judge] [--workers 2]
                 [--max-total-usd 1.0]
             Labels: one JSON object per line, {"domain", "expected": {field: value
             or null}, "notes"?} (format: evals/README.md).
 COMES OUT   evals/results.json (live) or evals/results.demo.json (demo): every
             field outcome, the summary, cost (runs + judge), model, git commit.
 TOUCHES     tenants (an 'eval-live' / 'eval-demo' tenant), runs/steps/companies,
-            local worker processes; in live mode the Anthropic API and the web.
+            local worker processes; in live mode the Gemini API (runs and the
+            judge, GEMINI_API_KEY) and the web (Tavily, TAVILY_API_KEY).
 FAILS WHEN  No labels -> exits 2. A run that never finishes is scored as a
             missing record (every field wrong), not dropped.
 """
@@ -35,14 +36,19 @@ from typing import Any
 from psycopg.types.json import Jsonb
 
 from chaos.harness import query_one, spawn_workers, stop_workers, wait_terminal
+from evals.judge import DEFAULT_MODEL as JUDGE_MODEL
+from evals.judge import IndustryJudge
 from evals.scoring import score_record, summarize
 from relay.config import settings
 from relay.db import pool
 from relay.llm.factory import planner_model, resolve_mode
 
 HERE = Path(__file__).parent
-EST_RUN_USD = 0.006  # Haiku 5.5 per run (CLAUDE.md); the results record the real figure
-EST_JUDGE_USD = 0.002  # one short Sonnet 5.5 comparison
+# Priced at Google's PAID rates (the free tier bills $0): a measured Flash-Lite
+# run was $0.003 (b0a3aea7); one short 3.8-Flash comparison is ~$0.001. The
+# results record the real figures.
+EST_RUN_USD = 0.005
+EST_JUDGE_USD = 0.001
 
 
 def load_labels(path: Path) -> list[dict[str, Any]]:
@@ -104,7 +110,7 @@ def main() -> None:
     parser.add_argument("--golden", type=Path, default=HERE / "golden.jsonl")
     parser.add_argument("--mode", choices=["demo", "live"], default="demo")
     parser.add_argument("--yes-spend", action="store_true", help="required for live / the judge")
-    parser.add_argument("--judge-model", default="claude-sonnet-5-5")
+    parser.add_argument("--judge-model", default=JUDGE_MODEL)
     parser.add_argument("--no-judge", action="store_true")
     parser.add_argument("--workers", type=int, default=2)
     parser.add_argument("--max-total-usd", type=float, default=1.0)
@@ -124,13 +130,13 @@ def main() -> None:
     )
     if est > 0 and not args.yes_spend:
         sys.exit("refusing: this costs money; pass --yes-spend to confirm")
-    if est > 0 and not os.environ.get("ANTHROPIC_API_KEY"):
-        sys.exit("refusing: ANTHROPIC_API_KEY is not set")
+    if est > 0 and not os.environ.get("GEMINI_API_KEY"):
+        sys.exit("refusing: GEMINI_API_KEY is not set (the live runs and the judge need it)")
+    if args.mode == "live" and not settings.tavily_api_key:
+        sys.exit("refusing: TAVILY_API_KEY is not set (live runs search the real web)")
 
     judge = None
     if use_judge:
-        from evals.judge import IndustryJudge
-
         judge = IndustryJudge(args.judge_model)
 
     tenant_id = tenant(args.mode)
@@ -186,6 +192,7 @@ def main() -> None:
         "summary": summary,
         "rows": rows,
         "judge_verdicts": judge.reasons if judge else [],
+        "judge_errors": judge.errors if judge else [],
     }
     path = HERE / ("results.json" if args.mode == "live" else "results.demo.json")
     path.write_text(json.dumps(out, indent=2, default=str) + "\n", encoding="utf-8")

@@ -193,7 +193,7 @@ def synthetic_call_id(turn: int, position: int) -> str:
     return f"{SYNTHETIC_ID_PREFIX}{turn}-{position}"
 
 
-def _usage(body: dict[str, Any]) -> tuple[int, int, int]:
+def usage_tokens(body: dict[str, Any]) -> tuple[int, int, int]:
     """(uncached input, cache reads, output). Google bills thinking as output."""
     usage = body.get("usageMetadata") or {}
     prompt = int(usage.get("promptTokenCount") or 0)
@@ -227,7 +227,7 @@ def to_response(requested_model: str, body: dict[str, Any], turn: int) -> Respon
     else:
         stop = _STOP.get(finish, "other")
 
-    uncached, cache_read, output = _usage(body)
+    uncached, cache_read, output = usage_tokens(body)
     return Response(
         model=requested_model,  # prices are looked up by what we asked for, checked at boot
         content=text,
@@ -244,7 +244,7 @@ def to_response(requested_model: str, body: dict[str, Any], turn: int) -> Respon
 
 
 # ── errors ───────────────────────────────────────────────────────────────
-def _error_text(response: httpx2.Response) -> str:
+def error_text(response: httpx2.Response) -> str:
     """The API's own message, never a header: headers carry the key."""
     try:
         detail = response.json().get("error") or {}
@@ -293,10 +293,10 @@ class GeminiLLMClient:
         if response.status_code == 429 and is_daily_quota(response):
             # the free tier's daily allowance is gone until midnight Pacific:
             # fatal on purpose, so the run ends honestly instead of retrying
-            raise FatalError(f"model daily quota exhausted ({_error_text(response)})")
+            raise FatalError(f"model daily quota exhausted ({error_text(response)})")
         if response.status_code in RETRYABLE_STATUS or response.status_code >= 500:
-            raise RetryableError(f"model unavailable ({_error_text(response)})")
-        raise FatalError(f"model request rejected ({_error_text(response)})")
+            raise RetryableError(f"model unavailable ({error_text(response)})")
+        raise FatalError(f"model request rejected ({error_text(response)})")
 
     def call(
         self,

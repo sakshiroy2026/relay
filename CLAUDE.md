@@ -39,7 +39,9 @@ no Anthropic key ever arrived. `relay/llm/gemini_client.py` is the adapter
 (`GEMINI_MODEL`, default `gemini-3.5-flash-lite`); `live` and the new
 `public_real` run modes both use it. The Claude adapter stays but is **unused**:
 don't delete it, and don't put a Claude model on a path a Gemini run can take
-(`factory.escalation_allowed()` is the gate). Calls are priced at Google's paid
+(`factory.escalation_model()` / `fallback_model()` are the gate: each provider has
+its own pair, `GEMINI_ESCALATION_MODEL` / `GEMINI_FALLBACK_MODEL`, and a cross-family
+id is dropped). Calls are priced at Google's paid
 rates on purpose, so the budget cap and `/ops` keep meaning something while the
 bill is $0.
 

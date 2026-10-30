@@ -41,7 +41,13 @@ from relay.core.repair import correction_message, parse_final
 from relay.core.replay import assistant_message, replay_ledger
 from relay.core.retry import FatalError, RetryableError, call_with_retries
 from relay.llm.client import Response, ToolCall
-from relay.llm.factory import escalation_allowed, make_llm, planner_model, resolve_mode
+from relay.llm.factory import (
+    escalation_model,
+    fallback_model,
+    make_llm,
+    planner_model,
+    resolve_mode,
+)
 from relay.llm.pricing import estimate, price
 from relay.obs.tracing import tracer
 
@@ -229,19 +235,20 @@ def run_agent(
     if escalated:
         model = escalated
     last_prompt = state.last_prompt_tokens
+    # this provider's own pair ("" = none): a Gemini run never gets a Claude id
+    escalate_model = escalation_model(llm_provider)
+    fall_model = fallback_model(llm_provider)
 
     def can_afford(candidate: str) -> bool:
         # pessimistic (no cache) price of one call on `candidate`, checked BEFORE it is made
         return (
-            escalation_allowed(llm_provider)  # Gemini has no second provider to escalate to
-            and bool(candidate)
+            bool(candidate)
             and candidate != model
             and spent + estimate(candidate, last_prompt + 1000) <= budget_usd
         )
 
     def escalation() -> str | None:
-        esc = settings.escalation_model
-        return esc if not escalated and can_afford(esc) else None
+        return escalate_model if not escalated and can_afford(escalate_model) else None
 
     if state.unjudged_answer is not None:  # died after the last model_call, before judging it
         esc = escalation()
@@ -309,10 +316,15 @@ def run_agent(
                 # P5: the primary is still down after its retries. One turn on the
                 # fallback model, if the run can afford it; the next turn tries the
                 # primary again (not sticky: an outage is usually short).
-                if not can_afford(settings.fallback_model):
+                if not can_afford(fall_model):
                     raise
+                # Timed-out retries can outlast the lease (P5 on Gemini: 3.8 Flash
+                # was measured past the 60 s timeout), so renew it, and stop if it
+                # is already gone, before asking a second model.
+                if not heartbeat():
+                    raise LeaseLost(f"run {run_id}: lease lost before the fallback") from None
                 fallback_from = model
-                response, attempts = ask(settings.fallback_model)
+                response, attempts = ask(fall_model)
         except RetryableError as exc:  # still failing after every attempt
             append_step(
                 run_id,
