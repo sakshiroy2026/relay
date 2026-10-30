@@ -390,3 +390,17 @@ Pacific, because park() backdated runs an hour, out of the quota day.
 
 Not verified: a failure the model made by itself, a real outage, kill -9 of a real
 worker on this path, Render or Neon, real tools, the judge in a full eval run.
+
+## P3 on Gemini: thinking level and caching, measured (30 Oct)
+Built by Claude Code; see learn/P3_GEMINI.md. Explain-back owed.
+
+GEMINI_THINKING_LEVEL is opt-in and off by default, so P7's request bytes don't change.
+Measured with live_smoke --mode public_real (real model, fake tools, local Postgres, free
+tier, 35 requests): low $0.0028 a run, medium $0.0051, both 5/5 on the same domains. Implicit
+caching read zero tokens on all 35 calls. The default stays unset, because fake tools can't
+show whether low hurts accuracy: the eval decides that once the labels exist.
+
+Found on the way: the first batch sat pending for 10 minutes with 35 rows left open by pytest
+in the test database. Workers claim the oldest open run; clearing those rows fixed it, though
+the exact cause of the stall wasn't pinned down. No real calls were made during it (checked in
+the ledger). Clear open rows before running a harness on that database.

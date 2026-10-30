@@ -1,0 +1,46 @@
+{
+  "conditions": {
+    "date": "2026-10-30",
+    "database": "local Postgres (throwaway container)",
+    "model": "gemini-3.5-flash-lite",
+    "tools": "fake (public_real), so no Tavily credits and no accuracy signal",
+    "billed": "Gemini free tier, $0; cost is the paid rate",
+    "domains": "razorpay.com, stripe.com, anthropic.com, razorpay.com, stripe.com"
+  },
+  "levels": {
+    "low": {
+      "succeeded": 5,
+      "runs": 5,
+      "model_calls": 17,
+      "total_cost_usd": 0.014117,
+      "tokens_in_uncached": 30681,
+      "tokens_cache_read": 0,
+      "tokens_out": 1965,
+      "ledger_problems": 0,
+      "run_ids": [
+        "06a82930",
+        "79ceaa40",
+        "456eec26",
+        "73820586",
+        "2c8df406"
+      ]
+    },
+    "medium": {
+      "succeeded": 5,
+      "runs": 5,
+      "model_calls": 18,
+      "total_cost_usd": 0.025608,
+      "tokens_in_uncached": 37952,
+      "tokens_cache_read": 0,
+      "tokens_out": 5688,
+      "ledger_problems": 0,
+      "run_ids": [
+        "194afcf2",
+        "34dcae53",
+        "bd506829",
+        "76ac7f7e",
+        "5cc00f1e"
+      ]
+    }
+  }
+}
