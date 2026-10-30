@@ -452,7 +452,15 @@ Run `ef6ebda7` on Render, killed from the page's own button, resumed at step 10 
 page showed it correctly. Its record listed a page the run never opened, and flagged only one field.
 The ledger now settles that: `unread_sources()` names the sources a `public_real` run never opened,
 and the page labels the record "Not researched". No new dependency, no prompt change, no real calls
-to build it. Not checked: the label on a real run on Render.
+to build it. Checked on a real run on Render: `34d9af78` stripe.com named `https://stripe.com/about`,
+which it asked for and got a canned 404. The attempt before it, `a8bee82e`, failed with `model_stopped`
+and no record; the ledger doesn't keep Gemini's finish reason, so the cause is unknown.
+`gemini-3.8-flash` hasn't passed on Render: `70daab6a` hit the free tier's daily quota (429) and got no
+model reply, so a successful run there is still unproven.
+
+![Run 34d9af78 on Render: the yellow "Not researched" box above the record](learn/img/render-label-34d9af78.jpg)
+
+![Run 70daab6a on Render: failed on attempt 2 with model_fatal, $0 spent](learn/img/render-38flash-failed-70daab6a.jpg)
 
 ## The last funding labels: Stripe, Canva, Atlassian (30 Oct)
 See learn/P6_LIVE_EVAL.md section 4.

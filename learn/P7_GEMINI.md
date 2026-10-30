@@ -364,8 +364,39 @@ fairly cite a page they only saw as a search result.
 Checked: `tests/test_unread_sources.py` (9 tests, no real calls), and by eye on a local server with
 hand-written runs for three cases: source never opened, source opened, and a demo run with no label.
 
-Not checked: the label on a real run on Render, and `gemini-3.8-flash` on Render (this run never
-needed it, so that path has still only run locally, with forced failures).
+Then on a real run on Render (30 Oct, Neon): `34d9af78` stripe.com, no kill, succeeded (5 calls,
+$0.0038, `attempt_count` 1). The model asked for `https://stripe.com/about`, the canned fetch answered
+404, and the record still listed that page, gave its fields 0.99 and flagged nothing. `unread_sources`
+named the page, and the page showed the "real AI" pill and the yellow box above the record.
+
+The attempt just before it failed: `a8bee82e`, same domain, ended with `model_stopped` after 3 calls
+($0.0017) and wrote no record. Its last reply was neither a tool call nor an answer. The ledger keeps
+only `'other'`, not Gemini's finish reason, so the cause is unknown. Seen once; that gives no rate.
+
+![Run 34d9af78 on Render, succeeded, real AI: the yellow "Not researched" box above the record names https://stripe.com/about](img/render-label-34d9af78.jpg)
+
+![Run a8bee82e on Render, failed, real AI: the empty final record after model_stopped](img/render-failed-a8bee82e.jpg)
+
+Ledgers: [`34d9af78`](proofs/render-34d9af78.json), [`a8bee82e`](proofs/render-a8bee82e.json).
+
+`gemini-3.8-flash` on Render was tried once, and it did not pass. `70daab6a` (stripe.com, no kill,
+`GEMINI_MODEL` set to 3.8 Flash, 30 Oct) ended with `model_fatal` about 82 s after it started: no
+`model_call` row, 0 tokens, `attempt_count` 2. So a second worker took over with no kill, but the
+ledger can't say whether that was the 15 s lease running out or a redeploy. The cause is the free
+tier: the error step reads "model daily quota exhausted (429: RESOURCE_EXHAUSTED ...". The adapter
+treated it as fatal on purpose, so the run ended honestly instead of retrying. That text is cut at
+300 characters, before it names the metric or the model, so the limit itself isn't known. Flash-Lite
+had answered on Render 8 minutes earlier (`34d9af78`).
+
+![Run 70daab6a on Render while running: worker 30 on attempt 1, nothing spent yet](img/render-38flash-running-70daab6a.jpg)
+
+![Run 70daab6a on Render after it failed: attempt 2, worker 29, error model_fatal, $0 spent](img/render-38flash-failed-70daab6a.jpg)
+
+Ledger: [`70daab6a`](proofs/render-70daab6a.json), and its [error text](proofs/render-70daab6a-error.json).
+
+Not checked: why `a8bee82e` stopped, which worker event caused the takeover in `70daab6a`, and any
+successful `gemini-3.8-flash` run on Render. A 429 shows the request reached Google, not that the
+model answers there. That path has still only worked locally, with forced failures.
 
 ## 10. Interview lines
 
