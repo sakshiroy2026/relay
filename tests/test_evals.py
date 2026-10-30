@@ -167,6 +167,7 @@ def judge_with(
 def test_judge_asks_for_a_schema_constrained_verdict_and_prices_it() -> None:
     judge, seen = judge_with({"verdict": "same", "reason": "both payments"})
     assert judge.same("Fintech / Payments", "Payment processing") is True
+    assert judge.reasons[0]["reason"] == "both payments"  # kept, so a verdict can be audited
     request = seen[0]
     assert str(request.url).endswith(f"/models/{JUDGE_MODEL}:generateContent")
     assert request.headers["x-goog-api-key"] == "test-not-a-real-key"

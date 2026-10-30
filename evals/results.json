@@ -11,10 +11,1209 @@
   "labels_in_file": 20,
   "cost_usd": {
     "runs": 0.164967,
-    "judge": 0.002941
+    "judge": 0.005699
   },
   "elapsed_s": 1582.5,
   "summary": {
+    "overall": {
+      "scored": 116,
+      "correct": 96,
+      "wrong": 20,
+      "abstained": 0,
+      "accuracy": 0.828,
+      "precision": 0.828,
+      "abstention_rate": 0.0
+    },
+    "per_field": {
+      "name": {
+        "scored": 20,
+        "correct": 18,
+        "wrong": 2,
+        "abstained": 0,
+        "accuracy": 0.9,
+        "precision": 0.9,
+        "abstention_rate": 0.0
+      },
+      "hq_country": {
+        "scored": 20,
+        "correct": 19,
+        "wrong": 1,
+        "abstained": 0,
+        "accuracy": 0.95,
+        "precision": 0.95,
+        "abstention_rate": 0.0
+      },
+      "founded_year": {
+        "scored": 19,
+        "correct": 16,
+        "wrong": 3,
+        "abstained": 0,
+        "accuracy": 0.842,
+        "precision": 0.842,
+        "abstention_rate": 0.0
+      },
+      "industry": {
+        "scored": 20,
+        "correct": 15,
+        "wrong": 5,
+        "abstained": 0,
+        "accuracy": 0.75,
+        "precision": 0.75,
+        "abstention_rate": 0.0
+      },
+      "employee_range": {
+        "scored": 20,
+        "correct": 14,
+        "wrong": 6,
+        "abstained": 0,
+        "accuracy": 0.7,
+        "precision": 0.7,
+        "abstention_rate": 0.0
+      },
+      "funding_stage": {
+        "scored": 17,
+        "correct": 14,
+        "wrong": 3,
+        "abstained": 0,
+        "accuracy": 0.824,
+        "precision": 0.824,
+        "abstention_rate": 0.0
+      }
+    },
+    "records": 20
+  },
+  "rows": [
+    {
+      "domain": "atlassian.com",
+      "run_id": "52bbe3dd",
+      "status": "succeeded",
+      "cost_usd": 0.005465,
+      "model_calls": 5,
+      "error": null,
+      "fields": {
+        "name": {
+          "outcome": "correct",
+          "expected": "Atlassian",
+          "predicted": "Atlassian",
+          "method": "normalized"
+        },
+        "hq_country": {
+          "outcome": "correct",
+          "expected": "Australia",
+          "predicted": "Australia",
+          "method": "normalized"
+        },
+        "founded_year": {
+          "outcome": "correct",
+          "expected": 2002,
+          "predicted": 2002,
+          "method": "exact"
+        },
+        "industry": {
+          "outcome": "correct",
+          "expected": "proprietary software company",
+          "predicted": "Software",
+          "method": "judge",
+          "first_rule_outcome": "correct",
+          "first_rule_method": "judge"
+        },
+        "employee_range": {
+          "outcome": "correct",
+          "expected": "5000+",
+          "predicted": "5000+",
+          "method": "exact"
+        }
+      }
+    },
+    {
+      "domain": "zomato.com",
+      "run_id": "0f5df053",
+      "status": "succeeded",
+      "cost_usd": 0.005722,
+      "model_calls": 5,
+      "error": null,
+      "fields": {
+        "name": {
+          "outcome": "correct",
+          "expected": "Zomato",
+          "predicted": "Zomato",
+          "method": "normalized"
+        },
+        "hq_country": {
+          "outcome": "correct",
+          "expected": "India",
+          "predicted": "India",
+          "method": "normalized"
+        },
+        "founded_year": {
+          "outcome": "correct",
+          "expected": 2008,
+          "predicted": 2008,
+          "method": "exact"
+        },
+        "industry": {
+          "outcome": "correct",
+          "expected": "online restaurant guide and food ordering platform",
+          "predicted": "Food & Beverages / Food Delivery",
+          "method": "judge",
+          "first_rule_outcome": "correct",
+          "first_rule_method": "judge"
+        },
+        "employee_range": {
+          "outcome": "correct",
+          "expected": "5000+",
+          "predicted": "5000+",
+          "method": "exact"
+        },
+        "funding_stage": {
+          "outcome": "correct",
+          "expected": "public",
+          "predicted": "public",
+          "method": "exact"
+        }
+      }
+    },
+    {
+      "domain": "openai.com",
+      "run_id": "7170f605",
+      "status": "succeeded",
+      "cost_usd": 0.007662,
+      "model_calls": 7,
+      "error": null,
+      "fields": {
+        "name": {
+          "outcome": "correct",
+          "expected": "openai",
+          "predicted": "OpenAI",
+          "method": "normalized"
+        },
+        "hq_country": {
+          "outcome": "correct",
+          "expected": "United States",
+          "predicted": "United States",
+          "method": "normalized"
+        },
+        "industry": {
+          "outcome": "correct",
+          "expected": "Generative AI",
+          "predicted": "Artificial Intelligence",
+          "method": "judge",
+          "first_rule_outcome": "wrong",
+          "first_rule_method": "judge"
+        },
+        "employee_range": {
+          "outcome": "correct",
+          "expected": "1001-5000",
+          "predicted": "1001-5000",
+          "method": "exact"
+        },
+        "funding_stage": {
+          "outcome": "correct",
+          "expected": "series_d+",
+          "predicted": "series_d+",
+          "method": "exact"
+        }
+      }
+    },
+    {
+      "domain": "postman.com",
+      "run_id": "93df4a41",
+      "status": "succeeded",
+      "cost_usd": 0.00585,
+      "model_calls": 6,
+      "error": null,
+      "fields": {
+        "name": {
+          "outcome": "correct",
+          "expected": "postman",
+          "predicted": "Postman",
+          "method": "normalized"
+        },
+        "hq_country": {
+          "outcome": "correct",
+          "expected": "United States",
+          "predicted": "United States",
+          "method": "normalized"
+        },
+        "founded_year": {
+          "outcome": "correct",
+          "expected": 2014,
+          "predicted": 2014,
+          "method": "exact"
+        },
+        "industry": {
+          "outcome": "wrong",
+          "expected": "Software testing",
+          "predicted": "Software Development",
+          "method": "judge",
+          "first_rule_outcome": "wrong",
+          "first_rule_method": "judge"
+        },
+        "employee_range": {
+          "outcome": "wrong",
+          "expected": "201-1000",
+          "predicted": "1001-5000",
+          "method": "exact"
+        },
+        "funding_stage": {
+          "outcome": "correct",
+          "expected": "series_d+",
+          "predicted": "series_d+",
+          "method": "exact"
+        }
+      }
+    },
+    {
+      "domain": "canva.com",
+      "run_id": "c2458565",
+      "status": "succeeded",
+      "cost_usd": 0.005537,
+      "model_calls": 5,
+      "error": null,
+      "fields": {
+        "name": {
+          "outcome": "correct",
+          "expected": "canva",
+          "predicted": "Canva",
+          "method": "normalized"
+        },
+        "hq_country": {
+          "outcome": "correct",
+          "expected": "Australia",
+          "predicted": "Australia",
+          "method": "normalized"
+        },
+        "founded_year": {
+          "outcome": "wrong",
+          "expected": 2013,
+          "predicted": 2012,
+          "method": "exact"
+        },
+        "industry": {
+          "outcome": "correct",
+          "expected": "Graphic design,Software, Artificial intelligence",
+          "predicted": "Graphic Design Software",
+          "method": "judge",
+          "first_rule_outcome": "wrong",
+          "first_rule_method": "judge"
+        },
+        "employee_range": {
+          "outcome": "correct",
+          "expected": "5000+",
+          "predicted": "5000+",
+          "method": "exact"
+        }
+      }
+    },
+    {
+      "domain": "stripe.com",
+      "run_id": "124eb2ca",
+      "status": "succeeded",
+      "cost_usd": 0.004958,
+      "model_calls": 5,
+      "error": null,
+      "fields": {
+        "name": {
+          "outcome": "correct",
+          "expected": "stripe",
+          "predicted": "Stripe",
+          "method": "normalized"
+        },
+        "hq_country": {
+          "outcome": "correct",
+          "expected": [
+            "United States",
+            "Ireland"
+          ],
+          "predicted": "United States",
+          "method": "normalized"
+        },
+        "founded_year": {
+          "outcome": "correct",
+          "expected": 2009,
+          "predicted": 2009,
+          "method": "exact"
+        },
+        "industry": {
+          "outcome": "correct",
+          "expected": "multinational financial services and software as a service (SaaS)",
+          "predicted": "Financial Services / Payment Processing",
+          "method": "judge",
+          "first_rule_outcome": "wrong",
+          "first_rule_method": "judge"
+        },
+        "employee_range": {
+          "outcome": "correct",
+          "expected": "5000+",
+          "predicted": "5000+",
+          "method": "exact"
+        }
+      }
+    },
+    {
+      "domain": "razorpay.com",
+      "run_id": "4b8652f8",
+      "status": "succeeded",
+      "cost_usd": 0.007585,
+      "model_calls": 7,
+      "error": null,
+      "fields": {
+        "name": {
+          "outcome": "correct",
+          "expected": "Razorpay",
+          "predicted": "Razorpay",
+          "method": "normalized"
+        },
+        "hq_country": {
+          "outcome": "correct",
+          "expected": "India",
+          "predicted": "India",
+          "method": "normalized"
+        },
+        "founded_year": {
+          "outcome": "correct",
+          "expected": 2014,
+          "predicted": 2014,
+          "method": "exact"
+        },
+        "industry": {
+          "outcome": "wrong",
+          "expected": "Software Development",
+          "predicted": "Financial Services",
+          "method": "judge",
+          "first_rule_outcome": "wrong",
+          "first_rule_method": "judge"
+        },
+        "employee_range": {
+          "outcome": "correct",
+          "expected": "1001-5000",
+          "predicted": "1001-5000",
+          "method": "exact"
+        },
+        "funding_stage": {
+          "outcome": "correct",
+          "expected": "series_d+",
+          "predicted": "series_d+",
+          "method": "exact"
+        }
+      }
+    },
+    {
+      "domain": "myntra.com",
+      "run_id": "1fe2a970",
+      "status": "succeeded",
+      "cost_usd": 0.006661,
+      "model_calls": 6,
+      "error": null,
+      "fields": {
+        "name": {
+          "outcome": "correct",
+          "expected": "Myntra",
+          "predicted": "Myntra",
+          "method": "normalized"
+        },
+        "hq_country": {
+          "outcome": "correct",
+          "expected": "India",
+          "predicted": "India",
+          "method": "normalized"
+        },
+        "founded_year": {
+          "outcome": "correct",
+          "expected": 2007,
+          "predicted": 2007,
+          "method": "exact"
+        },
+        "industry": {
+          "outcome": "correct",
+          "expected": "E-Commerce",
+          "predicted": "E-commerce",
+          "method": "exact",
+          "first_rule_outcome": "correct",
+          "first_rule_method": "exact"
+        },
+        "employee_range": {
+          "outcome": "correct",
+          "expected": "1001-5000",
+          "predicted": "1001-5000",
+          "method": "exact"
+        },
+        "funding_stage": {
+          "outcome": "wrong",
+          "expected": "series_d+",
+          "predicted": "public",
+          "method": "exact"
+        }
+      }
+    },
+    {
+      "domain": "juspay.io",
+      "run_id": "43e39968",
+      "status": "succeeded",
+      "cost_usd": 0.006362,
+      "model_calls": 6,
+      "error": null,
+      "fields": {
+        "name": {
+          "outcome": "correct",
+          "expected": "juspay",
+          "predicted": "Juspay",
+          "method": "normalized"
+        },
+        "hq_country": {
+          "outcome": "correct",
+          "expected": "India",
+          "predicted": "India",
+          "method": "normalized"
+        },
+        "founded_year": {
+          "outcome": "correct",
+          "expected": 2012,
+          "predicted": 2012,
+          "method": "exact"
+        },
+        "industry": {
+          "outcome": "wrong",
+          "expected": "Software Development",
+          "predicted": "Financial Services",
+          "method": "judge",
+          "first_rule_outcome": "wrong",
+          "first_rule_method": "judge"
+        },
+        "employee_range": {
+          "outcome": "correct",
+          "expected": "1001-5000",
+          "predicted": "1001-5000",
+          "method": "exact"
+        },
+        "funding_stage": {
+          "outcome": "correct",
+          "expected": "series_d+",
+          "predicted": "series_d+",
+          "method": "exact"
+        }
+      }
+    },
+    {
+      "domain": "darwinbox.com",
+      "run_id": "9d8243aa",
+      "status": "succeeded",
+      "cost_usd": 0.00687,
+      "model_calls": 6,
+      "error": null,
+      "fields": {
+        "name": {
+          "outcome": "correct",
+          "expected": "darwinbox",
+          "predicted": "Darwinbox",
+          "method": "normalized"
+        },
+        "hq_country": {
+          "outcome": "wrong",
+          "expected": "United States",
+          "predicted": "India",
+          "method": "normalized"
+        },
+        "founded_year": {
+          "outcome": "correct",
+          "expected": 2015,
+          "predicted": 2015,
+          "method": "exact"
+        },
+        "industry": {
+          "outcome": "correct",
+          "expected": "Software Development",
+          "predicted": "Human Resources Software",
+          "method": "judge",
+          "first_rule_outcome": "wrong",
+          "first_rule_method": "judge"
+        },
+        "funding_stage": {
+          "outcome": "correct",
+          "expected": "series_d+",
+          "predicted": "series_d+",
+          "method": "exact"
+        },
+        "employee_range": {
+          "outcome": "correct",
+          "expected": "1001-5000",
+          "predicted": "1001-5000",
+          "method": "exact"
+        }
+      }
+    },
+    {
+      "domain": "blue-enigma.com",
+      "run_id": "cea330da",
+      "status": "succeeded",
+      "cost_usd": 0.009617,
+      "model_calls": 10,
+      "error": null,
+      "fields": {
+        "name": {
+          "outcome": "correct",
+          "expected": "Blue Enigma",
+          "predicted": "Blue Enigma",
+          "method": "normalized"
+        },
+        "hq_country": {
+          "outcome": "correct",
+          "expected": "India",
+          "predicted": "India",
+          "method": "normalized"
+        },
+        "founded_year": {
+          "outcome": "wrong",
+          "expected": 2025,
+          "predicted": null,
+          "method": "missing"
+        },
+        "industry": {
+          "outcome": "correct",
+          "expected": "Artificial Intelligence",
+          "predicted": "Artificial Intelligence / Hospitality Software",
+          "method": "judge",
+          "first_rule_outcome": "wrong",
+          "first_rule_method": "judge"
+        },
+        "employee_range": {
+          "outcome": "correct",
+          "expected": "11-50",
+          "predicted": "11-50",
+          "method": "exact"
+        },
+        "funding_stage": {
+          "outcome": "wrong",
+          "expected": "bootstrapped",
+          "predicted": "unknown",
+          "method": "missing"
+        }
+      }
+    },
+    {
+      "domain": "careers.cred.club",
+      "run_id": "a803c716",
+      "status": "succeeded",
+      "cost_usd": 0.006196,
+      "model_calls": 6,
+      "error": null,
+      "fields": {
+        "name": {
+          "outcome": "correct",
+          "expected": "CRED",
+          "predicted": "CRED",
+          "method": "normalized"
+        },
+        "hq_country": {
+          "outcome": "correct",
+          "expected": "India",
+          "predicted": "India",
+          "method": "normalized"
+        },
+        "founded_year": {
+          "outcome": "correct",
+          "expected": 2018,
+          "predicted": 2018,
+          "method": "exact"
+        },
+        "industry": {
+          "outcome": "correct",
+          "expected": "Financial Services",
+          "predicted": "Financial Technology",
+          "method": "judge",
+          "first_rule_outcome": "wrong",
+          "first_rule_method": "judge"
+        },
+        "employee_range": {
+          "outcome": "wrong",
+          "expected": "201-1000",
+          "predicted": "1001-5000",
+          "method": "exact"
+        },
+        "funding_stage": {
+          "outcome": "correct",
+          "expected": "series_d+",
+          "predicted": "series_d+",
+          "method": "exact"
+        }
+      }
+    },
+    {
+      "domain": "chargebee.com",
+      "run_id": "5ada59c3",
+      "status": "succeeded",
+      "cost_usd": 0.00978,
+      "model_calls": 8,
+      "error": null,
+      "fields": {
+        "name": {
+          "outcome": "correct",
+          "expected": "Chargebee",
+          "predicted": "Chargebee",
+          "method": "normalized"
+        },
+        "hq_country": {
+          "outcome": "correct",
+          "expected": "United States",
+          "predicted": "United States",
+          "method": "normalized"
+        },
+        "founded_year": {
+          "outcome": "correct",
+          "expected": 2011,
+          "predicted": 2011,
+          "method": "exact"
+        },
+        "industry": {
+          "outcome": "correct",
+          "expected": "Financial Services",
+          "predicted": "Financial Services / Software",
+          "method": "judge",
+          "first_rule_outcome": "wrong",
+          "first_rule_method": "judge"
+        },
+        "employee_range": {
+          "outcome": "correct",
+          "expected": "1001-5000",
+          "predicted": "1001-5000",
+          "method": "exact"
+        },
+        "funding_stage": {
+          "outcome": "correct",
+          "expected": "series_d+",
+          "predicted": "series_d+",
+          "method": "exact"
+        }
+      }
+    },
+    {
+      "domain": "huggingface.co",
+      "run_id": "93cf581c",
+      "status": "succeeded",
+      "cost_usd": 0.011993,
+      "model_calls": 11,
+      "error": null,
+      "fields": {
+        "name": {
+          "outcome": "correct",
+          "expected": "Hugging Face",
+          "predicted": "Hugging Face",
+          "method": "normalized"
+        },
+        "hq_country": {
+          "outcome": "correct",
+          "expected": "United States",
+          "predicted": "United States",
+          "method": "normalized"
+        },
+        "founded_year": {
+          "outcome": "correct",
+          "expected": 2016,
+          "predicted": 2016,
+          "method": "exact"
+        },
+        "industry": {
+          "outcome": "wrong",
+          "expected": "Software Development",
+          "predicted": "Artificial Intelligence",
+          "method": "judge",
+          "first_rule_outcome": "wrong",
+          "first_rule_method": "judge"
+        },
+        "employee_range": {
+          "outcome": "wrong",
+          "expected": "51-200",
+          "predicted": "201-1000",
+          "method": "exact"
+        },
+        "funding_stage": {
+          "outcome": "correct",
+          "expected": "series_d+",
+          "predicted": "series_d+",
+          "method": "exact"
+        }
+      }
+    },
+    {
+      "domain": "thewholetruthfoods.com",
+      "run_id": "18c82a43",
+      "status": "succeeded",
+      "cost_usd": 0.009187,
+      "model_calls": 8,
+      "error": null,
+      "fields": {
+        "name": {
+          "outcome": "correct",
+          "expected": "The Whole Truth Foods",
+          "predicted": "The Whole Truth Foods",
+          "method": "normalized"
+        },
+        "hq_country": {
+          "outcome": "correct",
+          "expected": "India",
+          "predicted": "India",
+          "method": "normalized"
+        },
+        "founded_year": {
+          "outcome": "correct",
+          "expected": 2019,
+          "predicted": 2019,
+          "method": "exact"
+        },
+        "industry": {
+          "outcome": "correct",
+          "expected": "Food & Beverages",
+          "predicted": "Food & Beverages",
+          "method": "exact",
+          "first_rule_outcome": "correct",
+          "first_rule_method": "exact"
+        },
+        "employee_range": {
+          "outcome": "wrong",
+          "expected": "51-200",
+          "predicted": "201-1000",
+          "method": "exact"
+        },
+        "funding_stage": {
+          "outcome": "wrong",
+          "expected": "series_d+",
+          "predicted": "series_c",
+          "method": "exact"
+        }
+      }
+    },
+    {
+      "domain": "galaxeye.space",
+      "run_id": "d696154b",
+      "status": "succeeded",
+      "cost_usd": 0.010342,
+      "model_calls": 9,
+      "error": null,
+      "fields": {
+        "name": {
+          "outcome": "wrong",
+          "expected": "GalaxEye",
+          "predicted": "GalaxEye Space",
+          "method": "normalized"
+        },
+        "hq_country": {
+          "outcome": "correct",
+          "expected": "India",
+          "predicted": "India",
+          "method": "normalized"
+        },
+        "founded_year": {
+          "outcome": "correct",
+          "expected": 2021,
+          "predicted": 2021,
+          "method": "exact"
+        },
+        "industry": {
+          "outcome": "correct",
+          "expected": "Defense and Space Manufacturing",
+          "predicted": "Space Technology / Aerospace",
+          "method": "judge",
+          "first_rule_outcome": "correct",
+          "first_rule_method": "judge"
+        },
+        "employee_range": {
+          "outcome": "correct",
+          "expected": "51-200",
+          "predicted": "51-200",
+          "method": "exact"
+        },
+        "funding_stage": {
+          "outcome": "correct",
+          "expected": "series_a",
+          "predicted": "series_a",
+          "method": "exact"
+        }
+      }
+    },
+    {
+      "domain": "lattice.com",
+      "run_id": "af9ae3cd",
+      "status": "succeeded",
+      "cost_usd": 0.007773,
+      "model_calls": 7,
+      "error": null,
+      "fields": {
+        "name": {
+          "outcome": "correct",
+          "expected": "Lattice",
+          "predicted": "Lattice",
+          "method": "normalized"
+        },
+        "hq_country": {
+          "outcome": "correct",
+          "expected": "United States",
+          "predicted": "United States",
+          "method": "normalized"
+        },
+        "founded_year": {
+          "outcome": "correct",
+          "expected": 2015,
+          "predicted": 2015,
+          "method": "exact"
+        },
+        "industry": {
+          "outcome": "correct",
+          "expected": "Software Development",
+          "predicted": "Human Resources Software",
+          "method": "judge",
+          "first_rule_outcome": "wrong",
+          "first_rule_method": "judge"
+        },
+        "employee_range": {
+          "outcome": "correct",
+          "expected": "201-1000",
+          "predicted": "201-1000",
+          "method": "exact"
+        },
+        "funding_stage": {
+          "outcome": "correct",
+          "expected": "series_d+",
+          "predicted": "series_d+",
+          "method": "exact"
+        }
+      }
+    },
+    {
+      "domain": "agsure.in",
+      "run_id": "38c25adc",
+      "status": "succeeded",
+      "cost_usd": 0.009431,
+      "model_calls": 9,
+      "error": null,
+      "fields": {
+        "name": {
+          "outcome": "correct",
+          "expected": "Agsure Innovations Pvt Ltd",
+          "predicted": "Agsure Innovations",
+          "method": "normalized"
+        },
+        "hq_country": {
+          "outcome": "correct",
+          "expected": "India",
+          "predicted": "India",
+          "method": "normalized"
+        },
+        "founded_year": {
+          "outcome": "wrong",
+          "expected": 2023,
+          "predicted": null,
+          "method": "missing"
+        },
+        "industry": {
+          "outcome": "wrong",
+          "expected": "Technology, Information and Internet",
+          "predicted": "AgriTech",
+          "method": "judge",
+          "first_rule_outcome": "wrong",
+          "first_rule_method": "judge"
+        },
+        "employee_range": {
+          "outcome": "wrong",
+          "expected": "11-50",
+          "predicted": "1-10",
+          "method": "exact"
+        },
+        "funding_stage": {
+          "outcome": "correct",
+          "expected": null,
+          "predicted": "unknown",
+          "method": "unknowable"
+        }
+      }
+    },
+    {
+      "domain": "getvokal.com",
+      "run_id": "dcf9931d",
+      "status": "succeeded",
+      "cost_usd": 0.010692,
+      "model_calls": 10,
+      "error": null,
+      "fields": {
+        "name": {
+          "outcome": "wrong",
+          "expected": "Vokal India",
+          "predicted": "Vokal",
+          "method": "normalized"
+        },
+        "hq_country": {
+          "outcome": "correct",
+          "expected": "India",
+          "predicted": "India",
+          "method": "normalized"
+        },
+        "founded_year": {
+          "outcome": "correct",
+          "expected": 2015,
+          "predicted": 2015,
+          "method": "exact"
+        },
+        "industry": {
+          "outcome": "correct",
+          "expected": "Technology, Information and Internet",
+          "predicted": "Knowledge Sharing / Q&A Platform",
+          "method": "judge",
+          "first_rule_outcome": "wrong",
+          "first_rule_method": "judge"
+        },
+        "employee_range": {
+          "outcome": "wrong",
+          "expected": "11-50",
+          "predicted": "51-200",
+          "method": "exact"
+        },
+        "funding_stage": {
+          "outcome": "correct",
+          "expected": "series_a",
+          "predicted": "series_a",
+          "method": "exact"
+        }
+      }
+    },
+    {
+      "domain": "unacademy.com",
+      "run_id": "0616daf8",
+      "status": "succeeded",
+      "cost_usd": 0.009724,
+      "model_calls": 8,
+      "error": null,
+      "fields": {
+        "name": {
+          "outcome": "correct",
+          "expected": "Unacademy",
+          "predicted": "Unacademy",
+          "method": "normalized"
+        },
+        "hq_country": {
+          "outcome": "correct",
+          "expected": "India",
+          "predicted": "India",
+          "method": "normalized"
+        },
+        "founded_year": {
+          "outcome": "correct",
+          "expected": 2015,
+          "predicted": 2015,
+          "method": "exact"
+        },
+        "industry": {
+          "outcome": "correct",
+          "expected": "E-Learning Providers",
+          "predicted": "EdTech",
+          "method": "judge",
+          "first_rule_outcome": "correct",
+          "first_rule_method": "judge"
+        },
+        "employee_range": {
+          "outcome": "correct",
+          "expected": "5000+",
+          "predicted": "5000+",
+          "method": "exact"
+        },
+        "funding_stage": {
+          "outcome": "correct",
+          "expected": "series_d+",
+          "predicted": "series_d+",
+          "method": "exact"
+        }
+      }
+    }
+  ],
+  "judge_verdicts": [
+    {
+      "expected": "proprietary software company",
+      "predicted": "Software",
+      "verdict": "same",
+      "reason": "The agent's value 'Software' is a broader category that encompasses the hand label 'proprietary software company'."
+    },
+    {
+      "expected": "online restaurant guide and food ordering platform",
+      "predicted": "Food & Beverages / Food Delivery",
+      "verdict": "same",
+      "reason": "The agent's value 'Food & Beverages / Food Delivery' describes the same core industry as 'online restaurant guide and food ordering platform', specifically capturing the food ordering and delivery aspect."
+    },
+    {
+      "expected": "Generative AI",
+      "predicted": "Artificial Intelligence",
+      "verdict": "same",
+      "reason": "Generative AI is a subset and specific application of Artificial Intelligence."
+    },
+    {
+      "expected": "Software testing",
+      "predicted": "Software Development",
+      "verdict": "different",
+      "reason": "Software testing is a specialized quality assurance phase, whereas software development refers to the broader process of creating and building software applications, making them distinct industry segments."
+    },
+    {
+      "expected": "Graphic design,Software, Artificial intelligence",
+      "predicted": "Graphic Design Software",
+      "verdict": "same",
+      "reason": "Graphic Design Software is a specific software sector that directly aligns with the hand label's combination of software, artificial intelligence, and graphic design."
+    },
+    {
+      "expected": "multinational financial services and software as a service (SaaS)",
+      "predicted": "Financial Services / Payment Processing",
+      "verdict": "same",
+      "reason": "Financial services and payment processing are a specific part of the multinational financial services and software as a service industry described by the hand label."
+    },
+    {
+      "expected": "Software Development",
+      "predicted": "Financial Services",
+      "verdict": "different",
+      "reason": "Software Development and Financial Services are two distinct industries; one refers to building software products and services while the other refers to banking, investments, and monetary management."
+    },
+    {
+      "expected": "Software Development",
+      "predicted": "Financial Services",
+      "verdict": "different",
+      "reason": "Software Development and Financial Services are distinct industries."
+    },
+    {
+      "expected": "Software Development",
+      "predicted": "Human Resources Software",
+      "verdict": "same",
+      "reason": "Human Resources Software is a specific sub-industry of Software Development."
+    },
+    {
+      "expected": "Artificial Intelligence",
+      "predicted": "Artificial Intelligence / Hospitality Software",
+      "verdict": "same",
+      "reason": "The agent's value includes 'Artificial Intelligence', which matches the hand label, while adding a specific sub-industry context."
+    },
+    {
+      "expected": "Financial Services",
+      "predicted": "Financial Technology",
+      "verdict": "same",
+      "reason": "Financial Technology is a specific subsector of Financial Services, meaning the agent's value describes a more specific part of the hand label's industry."
+    },
+    {
+      "expected": "Financial Services",
+      "predicted": "Financial Services / Software",
+      "verdict": "same",
+      "reason": "The agent's value 'Financial Services / Software' includes 'Financial Services', which matches the hand label, while adding 'Software' as a more specific detail."
+    },
+    {
+      "expected": "Software Development",
+      "predicted": "Artificial Intelligence",
+      "verdict": "different",
+      "reason": "Software Development is a broad industry encompassing all types of software creation, whereas Artificial Intelligence specifically refers to a specialized technological field and subset of computer science. While an AI company might do software development, 'Artificial Intelligence' is not a more specific part or sub-category of general software development in a way that implies they are the same industry."
+    },
+    {
+      "expected": "Defense and Space Manufacturing",
+      "predicted": "Space Technology / Aerospace",
+      "verdict": "same",
+      "reason": "Space Technology / Aerospace is synonymous with or a closely related sub-sector of Defense and Space Manufacturing, capturing the core aerospace and space industry components of the hand label."
+    },
+    {
+      "expected": "Software Development",
+      "predicted": "Human Resources Software",
+      "verdict": "same",
+      "reason": "Human Resources Software is a specific sub-industry of Software Development."
+    },
+    {
+      "expected": "Technology, Information and Internet",
+      "predicted": "AgriTech",
+      "verdict": "different",
+      "reason": "Technology, Information and Internet refers to the broader tech and internet sector, whereas AgriTech specifically refers to technology applied to agriculture, which represents a distinct industry focus."
+    },
+    {
+      "expected": "Technology, Information and Internet",
+      "predicted": "Knowledge Sharing / Q&A Platform",
+      "verdict": "same",
+      "reason": "A knowledge sharing or Q&A platform is a specific type of technology, information, and internet company."
+    },
+    {
+      "expected": "E-Learning Providers",
+      "predicted": "EdTech",
+      "verdict": "same",
+      "reason": "EdTech is synonymous with E-Learning Providers, representing the exact same industry sector."
+    }
+  ],
+  "judge_errors": [],
+  "judge_calls": 37,
+  "summary_excluding_industry": {
+    "overall": {
+      "scored": 96,
+      "correct": 81,
+      "wrong": 15,
+      "abstained": 0,
+      "accuracy": 0.844,
+      "precision": 0.844,
+      "abstention_rate": 0.0
+    },
+    "per_field": {
+      "name": {
+        "scored": 20,
+        "correct": 18,
+        "wrong": 2,
+        "abstained": 0,
+        "accuracy": 0.9,
+        "precision": 0.9,
+        "abstention_rate": 0.0
+      },
+      "hq_country": {
+        "scored": 20,
+        "correct": 19,
+        "wrong": 1,
+        "abstained": 0,
+        "accuracy": 0.95,
+        "precision": 0.95,
+        "abstention_rate": 0.0
+      },
+      "founded_year": {
+        "scored": 19,
+        "correct": 16,
+        "wrong": 3,
+        "abstained": 0,
+        "accuracy": 0.842,
+        "precision": 0.842,
+        "abstention_rate": 0.0
+      },
+      "industry": {
+        "scored": 0,
+        "correct": 0,
+        "wrong": 0,
+        "abstained": 0,
+        "accuracy": null,
+        "precision": null,
+        "abstention_rate": null
+      },
+      "employee_range": {
+        "scored": 20,
+        "correct": 14,
+        "wrong": 6,
+        "abstained": 0,
+        "accuracy": 0.7,
+        "precision": 0.7,
+        "abstention_rate": 0.0
+      },
+      "funding_stage": {
+        "scored": 17,
+        "correct": 14,
+        "wrong": 3,
+        "abstained": 0,
+        "accuracy": 0.824,
+        "precision": 0.824,
+        "abstention_rate": 0.0
+      }
+    },
+    "records": 20
+  },
+  "left_out_of_scoring": [
+    "atlassian.com funding_stage",
+    "canva.com funding_stage",
+    "stripe.com funding_stage"
+  ],
+  "after_the_eval": {
+    "rerun": "careers.cred.club as a803c716, replacing cred.club (db829041): the owner's label keeps the careers domain",
+    "rescored_without_model_calls": "every field but industry, against the owner's final labels (Stripe dual HQ, Myntra funding, Darwinbox employees, Unacademy founded year), with funding_stage 'unknown' counted as no answer",
+    "industry": "re-judged from the agent's saved answers on 30 Oct 2026, AFTER seeing the first score, with a clearer rule: a more specific part of the hand label's industry counts as the same, even with a second detail added. Same model, no agent runs. The first rule's verdicts and score are kept in judge_verdicts_first_rule and summary_first_judge_rule."
+  },
+  "summary_first_judge_rule": {
     "overall": {
       "scored": 116,
       "correct": 87,
@@ -82,908 +1281,7 @@
     },
     "records": 20
   },
-  "rows": [
-    {
-      "domain": "atlassian.com",
-      "run_id": "52bbe3dd",
-      "status": "succeeded",
-      "cost_usd": 0.005465,
-      "model_calls": 5,
-      "error": null,
-      "fields": {
-        "name": {
-          "outcome": "correct",
-          "expected": "Atlassian",
-          "predicted": "Atlassian",
-          "method": "normalized"
-        },
-        "hq_country": {
-          "outcome": "correct",
-          "expected": "Australia",
-          "predicted": "Australia",
-          "method": "normalized"
-        },
-        "founded_year": {
-          "outcome": "correct",
-          "expected": 2002,
-          "predicted": 2002,
-          "method": "exact"
-        },
-        "industry": {
-          "outcome": "correct",
-          "expected": "proprietary software company",
-          "predicted": "Software",
-          "method": "judge"
-        },
-        "employee_range": {
-          "outcome": "correct",
-          "expected": "5000+",
-          "predicted": "5000+",
-          "method": "exact"
-        }
-      }
-    },
-    {
-      "domain": "zomato.com",
-      "run_id": "0f5df053",
-      "status": "succeeded",
-      "cost_usd": 0.005722,
-      "model_calls": 5,
-      "error": null,
-      "fields": {
-        "name": {
-          "outcome": "correct",
-          "expected": "Zomato",
-          "predicted": "Zomato",
-          "method": "normalized"
-        },
-        "hq_country": {
-          "outcome": "correct",
-          "expected": "India",
-          "predicted": "India",
-          "method": "normalized"
-        },
-        "founded_year": {
-          "outcome": "correct",
-          "expected": 2008,
-          "predicted": 2008,
-          "method": "exact"
-        },
-        "industry": {
-          "outcome": "correct",
-          "expected": "online restaurant guide and food ordering platform",
-          "predicted": "Food & Beverages / Food Delivery",
-          "method": "judge"
-        },
-        "employee_range": {
-          "outcome": "correct",
-          "expected": "5000+",
-          "predicted": "5000+",
-          "method": "exact"
-        },
-        "funding_stage": {
-          "outcome": "correct",
-          "expected": "public",
-          "predicted": "public",
-          "method": "exact"
-        }
-      }
-    },
-    {
-      "domain": "openai.com",
-      "run_id": "7170f605",
-      "status": "succeeded",
-      "cost_usd": 0.007662,
-      "model_calls": 7,
-      "error": null,
-      "fields": {
-        "name": {
-          "outcome": "correct",
-          "expected": "openai",
-          "predicted": "OpenAI",
-          "method": "normalized"
-        },
-        "hq_country": {
-          "outcome": "correct",
-          "expected": "United States",
-          "predicted": "United States",
-          "method": "normalized"
-        },
-        "industry": {
-          "outcome": "wrong",
-          "expected": "Generative AI",
-          "predicted": "Artificial Intelligence",
-          "method": "judge"
-        },
-        "employee_range": {
-          "outcome": "correct",
-          "expected": "1001-5000",
-          "predicted": "1001-5000",
-          "method": "exact"
-        },
-        "funding_stage": {
-          "outcome": "correct",
-          "expected": "series_d+",
-          "predicted": "series_d+",
-          "method": "exact"
-        }
-      }
-    },
-    {
-      "domain": "postman.com",
-      "run_id": "93df4a41",
-      "status": "succeeded",
-      "cost_usd": 0.00585,
-      "model_calls": 6,
-      "error": null,
-      "fields": {
-        "name": {
-          "outcome": "correct",
-          "expected": "postman",
-          "predicted": "Postman",
-          "method": "normalized"
-        },
-        "hq_country": {
-          "outcome": "correct",
-          "expected": "United States",
-          "predicted": "United States",
-          "method": "normalized"
-        },
-        "founded_year": {
-          "outcome": "correct",
-          "expected": 2014,
-          "predicted": 2014,
-          "method": "exact"
-        },
-        "industry": {
-          "outcome": "wrong",
-          "expected": "Software testing",
-          "predicted": "Software Development",
-          "method": "judge"
-        },
-        "employee_range": {
-          "outcome": "wrong",
-          "expected": "201-1000",
-          "predicted": "1001-5000",
-          "method": "exact"
-        },
-        "funding_stage": {
-          "outcome": "correct",
-          "expected": "series_d+",
-          "predicted": "series_d+",
-          "method": "exact"
-        }
-      }
-    },
-    {
-      "domain": "canva.com",
-      "run_id": "c2458565",
-      "status": "succeeded",
-      "cost_usd": 0.005537,
-      "model_calls": 5,
-      "error": null,
-      "fields": {
-        "name": {
-          "outcome": "correct",
-          "expected": "canva",
-          "predicted": "Canva",
-          "method": "normalized"
-        },
-        "hq_country": {
-          "outcome": "correct",
-          "expected": "Australia",
-          "predicted": "Australia",
-          "method": "normalized"
-        },
-        "founded_year": {
-          "outcome": "wrong",
-          "expected": 2013,
-          "predicted": 2012,
-          "method": "exact"
-        },
-        "industry": {
-          "outcome": "wrong",
-          "expected": "Graphic design,Software, Artificial intelligence",
-          "predicted": "Graphic Design Software",
-          "method": "judge"
-        },
-        "employee_range": {
-          "outcome": "correct",
-          "expected": "5000+",
-          "predicted": "5000+",
-          "method": "exact"
-        }
-      }
-    },
-    {
-      "domain": "stripe.com",
-      "run_id": "124eb2ca",
-      "status": "succeeded",
-      "cost_usd": 0.004958,
-      "model_calls": 5,
-      "error": null,
-      "fields": {
-        "name": {
-          "outcome": "correct",
-          "expected": "stripe",
-          "predicted": "Stripe",
-          "method": "normalized"
-        },
-        "hq_country": {
-          "outcome": "correct",
-          "expected": [
-            "United States",
-            "Ireland"
-          ],
-          "predicted": "United States",
-          "method": "normalized"
-        },
-        "founded_year": {
-          "outcome": "correct",
-          "expected": 2009,
-          "predicted": 2009,
-          "method": "exact"
-        },
-        "industry": {
-          "outcome": "wrong",
-          "expected": "multinational financial services and software as a service (SaaS)",
-          "predicted": "Financial Services / Payment Processing",
-          "method": "judge"
-        },
-        "employee_range": {
-          "outcome": "correct",
-          "expected": "5000+",
-          "predicted": "5000+",
-          "method": "exact"
-        }
-      }
-    },
-    {
-      "domain": "razorpay.com",
-      "run_id": "4b8652f8",
-      "status": "succeeded",
-      "cost_usd": 0.007585,
-      "model_calls": 7,
-      "error": null,
-      "fields": {
-        "name": {
-          "outcome": "correct",
-          "expected": "Razorpay",
-          "predicted": "Razorpay",
-          "method": "normalized"
-        },
-        "hq_country": {
-          "outcome": "correct",
-          "expected": "India",
-          "predicted": "India",
-          "method": "normalized"
-        },
-        "founded_year": {
-          "outcome": "correct",
-          "expected": 2014,
-          "predicted": 2014,
-          "method": "exact"
-        },
-        "industry": {
-          "outcome": "wrong",
-          "expected": "Software Development",
-          "predicted": "Financial Services",
-          "method": "judge"
-        },
-        "employee_range": {
-          "outcome": "correct",
-          "expected": "1001-5000",
-          "predicted": "1001-5000",
-          "method": "exact"
-        },
-        "funding_stage": {
-          "outcome": "correct",
-          "expected": "series_d+",
-          "predicted": "series_d+",
-          "method": "exact"
-        }
-      }
-    },
-    {
-      "domain": "myntra.com",
-      "run_id": "1fe2a970",
-      "status": "succeeded",
-      "cost_usd": 0.006661,
-      "model_calls": 6,
-      "error": null,
-      "fields": {
-        "name": {
-          "outcome": "correct",
-          "expected": "Myntra",
-          "predicted": "Myntra",
-          "method": "normalized"
-        },
-        "hq_country": {
-          "outcome": "correct",
-          "expected": "India",
-          "predicted": "India",
-          "method": "normalized"
-        },
-        "founded_year": {
-          "outcome": "correct",
-          "expected": 2007,
-          "predicted": 2007,
-          "method": "exact"
-        },
-        "industry": {
-          "outcome": "correct",
-          "expected": "E-Commerce",
-          "predicted": "E-commerce",
-          "method": "exact"
-        },
-        "employee_range": {
-          "outcome": "correct",
-          "expected": "1001-5000",
-          "predicted": "1001-5000",
-          "method": "exact"
-        },
-        "funding_stage": {
-          "outcome": "wrong",
-          "expected": "series_d+",
-          "predicted": "public",
-          "method": "exact"
-        }
-      }
-    },
-    {
-      "domain": "juspay.io",
-      "run_id": "43e39968",
-      "status": "succeeded",
-      "cost_usd": 0.006362,
-      "model_calls": 6,
-      "error": null,
-      "fields": {
-        "name": {
-          "outcome": "correct",
-          "expected": "juspay",
-          "predicted": "Juspay",
-          "method": "normalized"
-        },
-        "hq_country": {
-          "outcome": "correct",
-          "expected": "India",
-          "predicted": "India",
-          "method": "normalized"
-        },
-        "founded_year": {
-          "outcome": "correct",
-          "expected": 2012,
-          "predicted": 2012,
-          "method": "exact"
-        },
-        "industry": {
-          "outcome": "wrong",
-          "expected": "Software Development",
-          "predicted": "Financial Services",
-          "method": "judge"
-        },
-        "employee_range": {
-          "outcome": "correct",
-          "expected": "1001-5000",
-          "predicted": "1001-5000",
-          "method": "exact"
-        },
-        "funding_stage": {
-          "outcome": "correct",
-          "expected": "series_d+",
-          "predicted": "series_d+",
-          "method": "exact"
-        }
-      }
-    },
-    {
-      "domain": "darwinbox.com",
-      "run_id": "9d8243aa",
-      "status": "succeeded",
-      "cost_usd": 0.00687,
-      "model_calls": 6,
-      "error": null,
-      "fields": {
-        "name": {
-          "outcome": "correct",
-          "expected": "darwinbox",
-          "predicted": "Darwinbox",
-          "method": "normalized"
-        },
-        "hq_country": {
-          "outcome": "wrong",
-          "expected": "United States",
-          "predicted": "India",
-          "method": "normalized"
-        },
-        "founded_year": {
-          "outcome": "correct",
-          "expected": 2015,
-          "predicted": 2015,
-          "method": "exact"
-        },
-        "industry": {
-          "outcome": "wrong",
-          "expected": "Software Development",
-          "predicted": "Human Resources Software",
-          "method": "judge"
-        },
-        "funding_stage": {
-          "outcome": "correct",
-          "expected": "series_d+",
-          "predicted": "series_d+",
-          "method": "exact"
-        },
-        "employee_range": {
-          "outcome": "correct",
-          "expected": "1001-5000",
-          "predicted": "1001-5000",
-          "method": "exact"
-        }
-      }
-    },
-    {
-      "domain": "blue-enigma.com",
-      "run_id": "cea330da",
-      "status": "succeeded",
-      "cost_usd": 0.009617,
-      "model_calls": 10,
-      "error": null,
-      "fields": {
-        "name": {
-          "outcome": "correct",
-          "expected": "Blue Enigma",
-          "predicted": "Blue Enigma",
-          "method": "normalized"
-        },
-        "hq_country": {
-          "outcome": "correct",
-          "expected": "India",
-          "predicted": "India",
-          "method": "normalized"
-        },
-        "founded_year": {
-          "outcome": "wrong",
-          "expected": 2025,
-          "predicted": null,
-          "method": "missing"
-        },
-        "industry": {
-          "outcome": "wrong",
-          "expected": "Artificial Intelligence",
-          "predicted": "Artificial Intelligence / Hospitality Software",
-          "method": "judge"
-        },
-        "employee_range": {
-          "outcome": "correct",
-          "expected": "11-50",
-          "predicted": "11-50",
-          "method": "exact"
-        },
-        "funding_stage": {
-          "outcome": "wrong",
-          "expected": "bootstrapped",
-          "predicted": "unknown",
-          "method": "missing"
-        }
-      }
-    },
-    {
-      "domain": "careers.cred.club",
-      "run_id": "a803c716",
-      "status": "succeeded",
-      "cost_usd": 0.006196,
-      "model_calls": 6,
-      "error": null,
-      "fields": {
-        "name": {
-          "outcome": "correct",
-          "expected": "CRED",
-          "predicted": "CRED",
-          "method": "normalized"
-        },
-        "hq_country": {
-          "outcome": "correct",
-          "expected": "India",
-          "predicted": "India",
-          "method": "normalized"
-        },
-        "founded_year": {
-          "outcome": "correct",
-          "expected": 2018,
-          "predicted": 2018,
-          "method": "exact"
-        },
-        "industry": {
-          "outcome": "wrong",
-          "expected": "Financial Services",
-          "predicted": "Financial Technology",
-          "method": "judge"
-        },
-        "employee_range": {
-          "outcome": "wrong",
-          "expected": "201-1000",
-          "predicted": "1001-5000",
-          "method": "exact"
-        },
-        "funding_stage": {
-          "outcome": "correct",
-          "expected": "series_d+",
-          "predicted": "series_d+",
-          "method": "exact"
-        }
-      }
-    },
-    {
-      "domain": "chargebee.com",
-      "run_id": "5ada59c3",
-      "status": "succeeded",
-      "cost_usd": 0.00978,
-      "model_calls": 8,
-      "error": null,
-      "fields": {
-        "name": {
-          "outcome": "correct",
-          "expected": "Chargebee",
-          "predicted": "Chargebee",
-          "method": "normalized"
-        },
-        "hq_country": {
-          "outcome": "correct",
-          "expected": "United States",
-          "predicted": "United States",
-          "method": "normalized"
-        },
-        "founded_year": {
-          "outcome": "correct",
-          "expected": 2011,
-          "predicted": 2011,
-          "method": "exact"
-        },
-        "industry": {
-          "outcome": "wrong",
-          "expected": "Financial Services",
-          "predicted": "Financial Services / Software",
-          "method": "judge"
-        },
-        "employee_range": {
-          "outcome": "correct",
-          "expected": "1001-5000",
-          "predicted": "1001-5000",
-          "method": "exact"
-        },
-        "funding_stage": {
-          "outcome": "correct",
-          "expected": "series_d+",
-          "predicted": "series_d+",
-          "method": "exact"
-        }
-      }
-    },
-    {
-      "domain": "huggingface.co",
-      "run_id": "93cf581c",
-      "status": "succeeded",
-      "cost_usd": 0.011993,
-      "model_calls": 11,
-      "error": null,
-      "fields": {
-        "name": {
-          "outcome": "correct",
-          "expected": "Hugging Face",
-          "predicted": "Hugging Face",
-          "method": "normalized"
-        },
-        "hq_country": {
-          "outcome": "correct",
-          "expected": "United States",
-          "predicted": "United States",
-          "method": "normalized"
-        },
-        "founded_year": {
-          "outcome": "correct",
-          "expected": 2016,
-          "predicted": 2016,
-          "method": "exact"
-        },
-        "industry": {
-          "outcome": "wrong",
-          "expected": "Software Development",
-          "predicted": "Artificial Intelligence",
-          "method": "judge"
-        },
-        "employee_range": {
-          "outcome": "wrong",
-          "expected": "51-200",
-          "predicted": "201-1000",
-          "method": "exact"
-        },
-        "funding_stage": {
-          "outcome": "correct",
-          "expected": "series_d+",
-          "predicted": "series_d+",
-          "method": "exact"
-        }
-      }
-    },
-    {
-      "domain": "thewholetruthfoods.com",
-      "run_id": "18c82a43",
-      "status": "succeeded",
-      "cost_usd": 0.009187,
-      "model_calls": 8,
-      "error": null,
-      "fields": {
-        "name": {
-          "outcome": "correct",
-          "expected": "The Whole Truth Foods",
-          "predicted": "The Whole Truth Foods",
-          "method": "normalized"
-        },
-        "hq_country": {
-          "outcome": "correct",
-          "expected": "India",
-          "predicted": "India",
-          "method": "normalized"
-        },
-        "founded_year": {
-          "outcome": "correct",
-          "expected": 2019,
-          "predicted": 2019,
-          "method": "exact"
-        },
-        "industry": {
-          "outcome": "correct",
-          "expected": "Food & Beverages",
-          "predicted": "Food & Beverages",
-          "method": "exact"
-        },
-        "employee_range": {
-          "outcome": "wrong",
-          "expected": "51-200",
-          "predicted": "201-1000",
-          "method": "exact"
-        },
-        "funding_stage": {
-          "outcome": "wrong",
-          "expected": "series_d+",
-          "predicted": "series_c",
-          "method": "exact"
-        }
-      }
-    },
-    {
-      "domain": "galaxeye.space",
-      "run_id": "d696154b",
-      "status": "succeeded",
-      "cost_usd": 0.010342,
-      "model_calls": 9,
-      "error": null,
-      "fields": {
-        "name": {
-          "outcome": "wrong",
-          "expected": "GalaxEye",
-          "predicted": "GalaxEye Space",
-          "method": "normalized"
-        },
-        "hq_country": {
-          "outcome": "correct",
-          "expected": "India",
-          "predicted": "India",
-          "method": "normalized"
-        },
-        "founded_year": {
-          "outcome": "correct",
-          "expected": 2021,
-          "predicted": 2021,
-          "method": "exact"
-        },
-        "industry": {
-          "outcome": "correct",
-          "expected": "Defense and Space Manufacturing",
-          "predicted": "Space Technology / Aerospace",
-          "method": "judge"
-        },
-        "employee_range": {
-          "outcome": "correct",
-          "expected": "51-200",
-          "predicted": "51-200",
-          "method": "exact"
-        },
-        "funding_stage": {
-          "outcome": "correct",
-          "expected": "series_a",
-          "predicted": "series_a",
-          "method": "exact"
-        }
-      }
-    },
-    {
-      "domain": "lattice.com",
-      "run_id": "af9ae3cd",
-      "status": "succeeded",
-      "cost_usd": 0.007773,
-      "model_calls": 7,
-      "error": null,
-      "fields": {
-        "name": {
-          "outcome": "correct",
-          "expected": "Lattice",
-          "predicted": "Lattice",
-          "method": "normalized"
-        },
-        "hq_country": {
-          "outcome": "correct",
-          "expected": "United States",
-          "predicted": "United States",
-          "method": "normalized"
-        },
-        "founded_year": {
-          "outcome": "correct",
-          "expected": 2015,
-          "predicted": 2015,
-          "method": "exact"
-        },
-        "industry": {
-          "outcome": "wrong",
-          "expected": "Software Development",
-          "predicted": "Human Resources Software",
-          "method": "judge"
-        },
-        "employee_range": {
-          "outcome": "correct",
-          "expected": "201-1000",
-          "predicted": "201-1000",
-          "method": "exact"
-        },
-        "funding_stage": {
-          "outcome": "correct",
-          "expected": "series_d+",
-          "predicted": "series_d+",
-          "method": "exact"
-        }
-      }
-    },
-    {
-      "domain": "agsure.in",
-      "run_id": "38c25adc",
-      "status": "succeeded",
-      "cost_usd": 0.009431,
-      "model_calls": 9,
-      "error": null,
-      "fields": {
-        "name": {
-          "outcome": "correct",
-          "expected": "Agsure Innovations Pvt Ltd",
-          "predicted": "Agsure Innovations",
-          "method": "normalized"
-        },
-        "hq_country": {
-          "outcome": "correct",
-          "expected": "India",
-          "predicted": "India",
-          "method": "normalized"
-        },
-        "founded_year": {
-          "outcome": "wrong",
-          "expected": 2023,
-          "predicted": null,
-          "method": "missing"
-        },
-        "industry": {
-          "outcome": "wrong",
-          "expected": "Technology, Information and Internet",
-          "predicted": "AgriTech",
-          "method": "judge"
-        },
-        "employee_range": {
-          "outcome": "wrong",
-          "expected": "11-50",
-          "predicted": "1-10",
-          "method": "exact"
-        },
-        "funding_stage": {
-          "outcome": "correct",
-          "expected": null,
-          "predicted": "unknown",
-          "method": "unknowable"
-        }
-      }
-    },
-    {
-      "domain": "getvokal.com",
-      "run_id": "dcf9931d",
-      "status": "succeeded",
-      "cost_usd": 0.010692,
-      "model_calls": 10,
-      "error": null,
-      "fields": {
-        "name": {
-          "outcome": "wrong",
-          "expected": "Vokal India",
-          "predicted": "Vokal",
-          "method": "normalized"
-        },
-        "hq_country": {
-          "outcome": "correct",
-          "expected": "India",
-          "predicted": "India",
-          "method": "normalized"
-        },
-        "founded_year": {
-          "outcome": "correct",
-          "expected": 2015,
-          "predicted": 2015,
-          "method": "exact"
-        },
-        "industry": {
-          "outcome": "wrong",
-          "expected": "Technology, Information and Internet",
-          "predicted": "Knowledge Sharing / Q&A Platform",
-          "method": "judge"
-        },
-        "employee_range": {
-          "outcome": "wrong",
-          "expected": "11-50",
-          "predicted": "51-200",
-          "method": "exact"
-        },
-        "funding_stage": {
-          "outcome": "correct",
-          "expected": "series_a",
-          "predicted": "series_a",
-          "method": "exact"
-        }
-      }
-    },
-    {
-      "domain": "unacademy.com",
-      "run_id": "0616daf8",
-      "status": "succeeded",
-      "cost_usd": 0.009724,
-      "model_calls": 8,
-      "error": null,
-      "fields": {
-        "name": {
-          "outcome": "correct",
-          "expected": "Unacademy",
-          "predicted": "Unacademy",
-          "method": "normalized"
-        },
-        "hq_country": {
-          "outcome": "correct",
-          "expected": "India",
-          "predicted": "India",
-          "method": "normalized"
-        },
-        "founded_year": {
-          "outcome": "correct",
-          "expected": 2015,
-          "predicted": 2015,
-          "method": "exact"
-        },
-        "industry": {
-          "outcome": "correct",
-          "expected": "E-Learning Providers",
-          "predicted": "EdTech",
-          "method": "judge"
-        },
-        "employee_range": {
-          "outcome": "correct",
-          "expected": "5000+",
-          "predicted": "5000+",
-          "method": "exact"
-        },
-        "funding_stage": {
-          "outcome": "correct",
-          "expected": "series_d+",
-          "predicted": "series_d+",
-          "method": "exact"
-        }
-      }
-    }
-  ],
-  "judge_verdicts": [
+  "judge_verdicts_first_rule": [
     {
       "expected": "proprietary software company",
       "predicted": "Software",
@@ -1074,85 +1372,5 @@
       "predicted": "EdTech",
       "verdict": "same"
     }
-  ],
-  "judge_errors": [],
-  "judge_calls": 19,
-  "summary_excluding_industry": {
-    "overall": {
-      "scored": 96,
-      "correct": 81,
-      "wrong": 15,
-      "abstained": 0,
-      "accuracy": 0.844,
-      "precision": 0.844,
-      "abstention_rate": 0.0
-    },
-    "per_field": {
-      "name": {
-        "scored": 20,
-        "correct": 18,
-        "wrong": 2,
-        "abstained": 0,
-        "accuracy": 0.9,
-        "precision": 0.9,
-        "abstention_rate": 0.0
-      },
-      "hq_country": {
-        "scored": 20,
-        "correct": 19,
-        "wrong": 1,
-        "abstained": 0,
-        "accuracy": 0.95,
-        "precision": 0.95,
-        "abstention_rate": 0.0
-      },
-      "founded_year": {
-        "scored": 19,
-        "correct": 16,
-        "wrong": 3,
-        "abstained": 0,
-        "accuracy": 0.842,
-        "precision": 0.842,
-        "abstention_rate": 0.0
-      },
-      "industry": {
-        "scored": 0,
-        "correct": 0,
-        "wrong": 0,
-        "abstained": 0,
-        "accuracy": null,
-        "precision": null,
-        "abstention_rate": null
-      },
-      "employee_range": {
-        "scored": 20,
-        "correct": 14,
-        "wrong": 6,
-        "abstained": 0,
-        "accuracy": 0.7,
-        "precision": 0.7,
-        "abstention_rate": 0.0
-      },
-      "funding_stage": {
-        "scored": 17,
-        "correct": 14,
-        "wrong": 3,
-        "abstained": 0,
-        "accuracy": 0.824,
-        "precision": 0.824,
-        "abstention_rate": 0.0
-      }
-    },
-    "records": 20
-  },
-  "left_out_of_scoring": [
-    "atlassian.com funding_stage",
-    "canva.com funding_stage",
-    "stripe.com funding_stage"
-  ],
-  "after_the_eval": {
-    "rerun": "careers.cred.club as a803c716, replacing cred.club (db829041): the owner's label keeps the careers domain",
-    "rescored_without_model_calls": "every field but industry, against the owner's final labels (Stripe dual HQ, Myntra funding, Darwinbox employees, Unacademy founded year), with funding_stage 'unknown' counted as no answer",
-    "industry": "the judge's verdicts from the run, unchanged"
-  }
+  ]
 }

@@ -35,14 +35,18 @@ DEFAULT_MODEL = "gemini-3.5-flash-lite"
 MAX_OUTPUT_TOKENS = 4000  # Gemini counts thinking inside this; a verdict is ~50 tokens
 RETRY_ATTEMPTS = 3
 
+# Clearer since 30 Oct 2026, after the first live eval: the old wording asked for "the same or a
+# reasonably close level of specificity", and "Financial Services / Software" against "Financial
+# Services" came back different. evals/results.json keeps the verdicts and score of both rules.
 PROMPT = """You compare two short labels describing a company's industry.
 Hand label (ground truth): {expected}
 Agent's value: {predicted}
 
 Answer "same" if the agent's value describes the same industry as the hand
-label, at the same or a reasonably close level of specificity (e.g. "Fintech /
-Payments" and "Payment processing" are the same). Answer "different" if it names
-another industry or is so broad that it would also fit very different companies.
+label, or a more specific part of it, even if it adds a second detail (e.g.
+"Fintech / Payments" and "Payment processing" are the same, and so are "Retail"
+and "Online grocery retail / Delivery"). Answer "different" if it names another
+industry or is so broad that it would also fit very different companies.
 Answer "unsure" only if you genuinely cannot tell."""
 
 SCHEMA = {
@@ -112,8 +116,16 @@ class IndustryJudge:
         parts = (candidates[0].get("content") or {}).get("parts") or []
         text = "".join(p.get("text") or "" for p in parts if not p.get("thought"))
         try:
-            verdict = json.loads(text)["verdict"]
+            answer = json.loads(text)
+            verdict = answer["verdict"]
         except (ValueError, KeyError, TypeError):
             return None
-        self.reasons.append({"expected": expected, "predicted": predicted, "verdict": verdict})
+        self.reasons.append(
+            {
+                "expected": expected,
+                "predicted": predicted,
+                "verdict": verdict,
+                "reason": answer.get("reason"),
+            }
+        )
         return {"same": True, "different": False}.get(verdict)

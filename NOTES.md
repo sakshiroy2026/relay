@@ -431,3 +431,16 @@ sleep). The race test failed once under load and that commit (cdaf65b) was pushe
 command didn't stop on failure; fixed in b252ea0, and commits are now gated on the checks.
 
 No new dependency. Floors moved to 0.7 / 0.7; the 0.85 precision placeholder isn't met.
+
+## Industry re-judged with a clearer rule (30 Oct)
+Built by Claude Code; see learn/P6_LIVE_EVAL.md section 5. Explain-back owed.
+
+Sakshi's decision, after seeing the misses. The first rule failed answers that plainly fit ("Financial
+Services / Software" against "Financial Services"). The new rule counts a more specific part of the label
+as the same. Same model, same saved answers, 18 requests, no agent runs. Industry went from 6/20 to 15/20,
+overall from 0.75 to 0.83. Without industry it's still 0.84, because no judge touches those fields.
+
+This rule was written after seeing the score, so it isn't a blind measurement, and results.json keeps both
+sets of verdicts. Two "same" verdicts look generous (OpenAI, Atlassian: the answer is broader than the
+label), and Vokal against Agsure is inconsistent. They weren't corrected by hand; without those two it's
+0.81. No negative controls were run. Floors moved to 0.78; the 0.85 placeholder still isn't met.
