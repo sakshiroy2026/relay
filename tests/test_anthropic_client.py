@@ -304,6 +304,8 @@ def test_a_billed_refusal_is_recorded_then_fails_the_run(
     assert [s["kind"] for s in steps] == ["run_started", "model_call", "error"]
     assert steps[1]["payload"]["cost_usd"] > 0  # the money spent is in the ledger
     assert steps[2]["payload"]["reason"] == "model_refused"
+    # this adapter gives no finish_reason, so the detail reads as it always has
+    assert steps[2]["payload"]["detail"] == "model stopped with 'refusal'"
 
     # a worker that died between the two rows: the resumed run fails without a new call
     calls_before = len(api.bodies)

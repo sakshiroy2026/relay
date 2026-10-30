@@ -1,3 +1,15 @@
+"""The shape every model client speaks: what the loop and the ledger see of a reply.
+
+WHAT IT IS  Relay's own types for one model reply, and the protocol a client
+            implements. No provider's vocabulary gets past this file, except
+            `finish_reason`, kept word for word so a failure can be explained.
+GOES IN     Nothing at runtime: definitions only.
+COMES OUT   StopReason, ToolCall, Response (`asdict(response)` is what a
+            `model_call` row stores) and the LLMClient protocol.
+TOUCHES     Nothing.
+FAILS WHEN  Never: there is no logic here.
+"""
+
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol
 
@@ -33,6 +45,9 @@ class Response:
     # only valid in an unchanged conversation, so rebuilding them is not allowed.
     raw_content: list[dict[str, Any]] | None = None
     served_model: str | None = None  # what the provider says actually ran
+    # The provider's own word for why it stopped: `stop_reason` folds every word
+    # Relay has no name for into "other", and this is the only record of which it was.
+    finish_reason: str | None = None
 
 
 class LLMClient(Protocol):

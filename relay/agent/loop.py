@@ -24,7 +24,9 @@ FAILS WHEN  heartbeat() is False or a step index is taken -> LeaseLost is
             step and None (one call can overshoot: its cost is only known after).
             A model call still transiently failing after 3 tries -> `error`
             step (`model_unavailable`) and None; a permanent model failure
-            -> `model_fatal`, never retried (Day 8).
+            -> `model_fatal`, never retried (Day 8). A billed reply that is
+            neither a tool turn nor an answer -> `error` step whose detail
+            quotes the provider's own stop word, and None.
 """
 
 from collections.abc import Callable
@@ -63,13 +65,18 @@ STOP_ERRORS = {
 }
 
 
-def _stop_error(run_id: UUID, index: int, stop_reason: str, worker_id: str) -> None:
+def _stop_error(
+    run_id: UUID, index: int, stop_reason: str, finish_reason: str | None, worker_id: str
+) -> None:
     """The reply was paid for and is already in the ledger; now end the run honestly."""
+    detail = f"model stopped with {stop_reason!r}"
+    if finish_reason:  # the provider's own word; a row older than this field has none
+        detail += f" (provider said {finish_reason!r})"
     append_step(
         run_id,
         index,
         "error",
-        {"reason": STOP_ERRORS[stop_reason], "detail": f"model stopped with {stop_reason!r}"},
+        {"reason": STOP_ERRORS[stop_reason], "detail": detail},
         worker_id,
     )
 
@@ -213,7 +220,7 @@ def run_agent(
     repairs_used = state.repairs_used  # re-asks are counted from the ledger too
 
     if state.unhandled_stop is not None:  # died after a billed refusal/max_tokens reply
-        _stop_error(run_id, index, state.unhandled_stop, worker_id)
+        _stop_error(run_id, index, state.unhandled_stop, state.unhandled_finish, worker_id)
         return None
 
     try:  # before any money is spent: a misconfigured model fails the run, not the worker
@@ -375,7 +382,7 @@ def run_agent(
 
         # --- a billed reply with no usable outcome (refusal, max_tokens): end the run ---
         if response.stop_reason in STOP_ERRORS:
-            _stop_error(run_id, index, response.stop_reason, worker_id)
+            _stop_error(run_id, index, response.stop_reason, response.finish_reason, worker_id)
             return None
 
         # --- G: final answer? Judge it through the repair ladder. ---

@@ -31,6 +31,7 @@ from relay.api.main import app
 from relay.config import settings
 from relay.core.retry import FatalError, RetryableError
 from relay.llm.gemini_client import (
+    ERROR_TEXT_LIMIT,
     SYNTHETIC_ID_PREFIX,
     GeminiLLMClient,
     strip_signatures,
@@ -248,11 +249,29 @@ def test_stop_reasons_map_to_relays_five(finish: str, expected: str) -> None:
     assert api.client().call(MODEL, "sys", MESSAGES, TOOL_SCHEMAS).stop_reason == expected
 
 
+@pytest.mark.parametrize(
+    ("finish", "stop", "kept"),
+    [
+        ("MALFORMED_FUNCTION_CALL", "other", "MALFORMED_FUNCTION_CALL"),
+        ("A_WORD_GOOGLE_ADDS_NEXT_YEAR", "other", "A_WORD_GOOGLE_ADDS_NEXT_YEAR"),
+        ("SAFETY", "refusal", "SAFETY"),
+        ("STOP", "end_turn", "STOP"),
+        ("", "other", None),  # the reply gave no reason: nothing is made up
+    ],
+)
+def test_the_finish_reason_is_kept_word_for_word(finish: str, stop: str, kept: str | None) -> None:
+    api = FakeAPI(lambda _b: httpx2.Response(200, json=reply([{"text": "x"}], finish)))
+    response = api.client().call(MODEL, "sys", MESSAGES, TOOL_SCHEMAS)
+    assert (response.stop_reason, response.finish_reason) == (stop, kept)
+
+
 def test_a_function_call_beats_the_finish_reason() -> None:
     """A reply with something to run is a tool turn whatever the finish reason says."""
     parts = [{"functionCall": {"id": "g1", "name": "web_search", "args": {}}}]
     api = FakeAPI(lambda _b: httpx2.Response(200, json=reply(parts, "MAX_TOKENS")))
-    assert api.client().call(MODEL, "sys", MESSAGES, TOOL_SCHEMAS).stop_reason == "tool_use"
+    response = api.client().call(MODEL, "sys", MESSAGES, TOOL_SCHEMAS)
+    assert response.stop_reason == "tool_use"
+    assert response.finish_reason == "MAX_TOKENS"  # what it said is still on the record
 
 
 def test_a_blocked_prompt_is_a_refusal_not_a_crash() -> None:
@@ -260,6 +279,7 @@ def test_a_blocked_prompt_is_a_refusal_not_a_crash() -> None:
     api = FakeAPI(lambda _b: httpx2.Response(200, json=body))
     response = api.client().call(MODEL, "sys", MESSAGES, TOOL_SCHEMAS)
     assert response.stop_reason == "refusal" and response.content == ""
+    assert response.finish_reason == "SAFETY"  # no candidate, so the blockReason says why
 
 
 # ── errors ───────────────────────────────────────────────────────────────
@@ -279,18 +299,100 @@ def quota_error(quota_id: str) -> dict[str, Any]:
     }
 
 
+# Word for word up to "metric: genera", where run 70daab6a's ledger row was cut at 300
+# characters. Everything after that was never captured, so that part is written by hand.
+DAILY_QUOTA_MESSAGE = (
+    "You exceeded your current quota, please check your plan and billing details. For more "
+    "information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. "
+    "To monitor your current usage, head to: https://ai.dev/rate-limit. \n"
+    "* Quota exceeded for metric: generativelanguage.googleapis.com/"
+    "generate_content_free_tier_requests, limit: 1000, model: gemini-3.8-flash\n"
+    "Please retry in 3h12m5s."
+)
+
+
+def error_text_of(status: int, body: dict[str, Any], api_key: str = "test-not-a-real-key") -> str:
+    """What a failed call would write to the ledger's `detail`."""
+    client = GeminiLLMClient(
+        client=httpx2.Client(
+            transport=httpx2.MockTransport(lambda _r: httpx2.Response(status, json=body))
+        ),
+        api_key=api_key,
+    )
+    with pytest.raises((RetryableError, FatalError)) as caught:
+        client.call(MODEL, "sys", MESSAGES, TOOL_SCHEMAS)
+    return str(caught.value)
+
+
 def test_a_per_minute_429_is_retryable() -> None:
     body = quota_error("GenerateRequestsPerMinutePerProjectPerModel-FreeTier")
     api = FakeAPI(lambda _b: httpx2.Response(429, json=body))
-    with pytest.raises(RetryableError, match="model unavailable"):
+    with pytest.raises(RetryableError, match="model unavailable") as caught:
         api.client().call(MODEL, "sys", MESSAGES, TOOL_SCHEMAS)
+    assert "GenerateRequestsPerMinutePerProjectPerModel-FreeTier" in str(caught.value)
 
 
 def test_a_daily_quota_429_is_fatal_so_it_cannot_burn_every_retry() -> None:
     body = quota_error("GenerateRequestsPerDayPerProjectPerModel-FreeTier")
     api = FakeAPI(lambda _b: httpx2.Response(429, json=body))
-    with pytest.raises(FatalError, match="daily quota exhausted"):
+    with pytest.raises(FatalError, match="daily quota exhausted") as caught:
         api.client().call(MODEL, "sys", MESSAGES, TOOL_SCHEMAS)
+    assert "GenerateRequestsPerDayPerProjectPerModel-FreeTier" in str(caught.value)
+
+
+def test_a_daily_quota_error_keeps_the_metric_and_model_the_old_cut_removed() -> None:
+    body = quota_error("GenerateRequestsPerDayPerProjectPerModel-FreeTier")
+    body["error"]["message"] = DAILY_QUOTA_MESSAGE
+    text = error_text_of(429, body)
+    assert "generate_content_free_tier_requests" in text
+    assert "limit: 1000" in text
+    assert "model: gemini-3.8-flash" in text
+    assert "Please retry in 3h12m5s." in text
+
+
+def test_the_quota_survives_a_message_that_runs_past_the_limit() -> None:
+    """The ids go first, so an over-long message only ever costs its own end."""
+    body = quota_error("GenerateRequestsPerDayPerProjectPerModel-FreeTier")
+    body["error"]["message"] = "padding " * 1000
+    text = error_text_of(429, body)
+    assert "GenerateRequestsPerDayPerProjectPerModel-FreeTier" in text
+    assert len(text) <= ERROR_TEXT_LIMIT + len("model daily quota exhausted ()")
+
+
+def test_several_quotas_are_all_named_each_once() -> None:
+    body = quota_error("GenerateRequestsPerMinutePerProjectPerModel-FreeTier")
+    violations = body["error"]["details"][0]["violations"]
+    violations.append({"quotaId": "GenerateContentInputTokensPerModelPerMinute-FreeTier"})
+    violations.append(dict(violations[0]))
+    text = error_text_of(429, body)
+    assert text.count("GenerateRequestsPerMinutePerProjectPerModel-FreeTier") == 1
+    assert "GenerateContentInputTokensPerModelPerMinute-FreeTier" in text
+
+
+def test_only_the_quota_id_is_taken_from_details() -> None:
+    """`details` can hold project numbers and links; those stay out of the ledger."""
+    body = quota_error("GenerateRequestsPerMinutePerProjectPerModel-FreeTier")
+    body["error"]["details"].append(
+        {
+            "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+            "metadata": {"consumer": "projects/1234567890"},
+        }
+    )
+    assert "1234567890" not in error_text_of(429, body)
+
+
+def test_a_body_it_cannot_read_still_gives_a_status_and_any_message() -> None:
+    odd = {"error": {"status": "INTERNAL", "message": "nope", "details": ["not an object"]}}
+    assert "500: INTERNAL nope" in error_text_of(500, odd)
+
+    client = GeminiLLMClient(
+        client=httpx2.Client(
+            transport=httpx2.MockTransport(lambda _r: httpx2.Response(502, text="<html>oops"))
+        ),
+        api_key="k",
+    )
+    with pytest.raises(RetryableError, match="502: Bad Gateway"):
+        client.call(MODEL, "sys", MESSAGES, TOOL_SCHEMAS)
 
 
 @pytest.mark.parametrize("status", [408, 500, 503])
@@ -315,6 +417,21 @@ def test_an_error_never_quotes_a_header() -> None:
     assert "x-goog-api-key" not in str(caught.value) and "test-not-a-real-key" not in str(
         caught.value
     )
+
+
+def test_an_error_that_echoes_the_key_has_it_cut_out() -> None:
+    body = {"error": {"status": "INVALID_ARGUMENT", "message": "bad test-not-a-real-key given"}}
+    text = error_text_of(400, body)
+    assert "test-not-a-real-key" not in text and "bad [key] given" in text
+
+
+def test_the_length_limit_cannot_leave_half_a_key_behind() -> None:
+    """The key straddles the cut, so scrubbing has to happen first."""
+    key = "test-not-a-real-key"
+    prefix = "400: INVALID_ARGUMENT "
+    padding = "x" * (ERROR_TEXT_LIMIT - len(prefix) - len(key) // 2)
+    body = {"error": {"status": "INVALID_ARGUMENT", "message": padding + key}}
+    assert key[: len(key) // 2] not in error_text_of(400, body, api_key=key)
 
 
 def test_a_timeout_is_retryable() -> None:
@@ -442,6 +559,59 @@ def test_a_billed_refusal_is_recorded_then_fails_the_run(
     assert [s["kind"] for s in steps] == ["run_started", "model_call", "error"]
     assert steps[1]["payload"]["cost_usd"] > 0  # metered at the paid rate, in the ledger
     assert steps[2]["payload"]["reason"] == "model_refused"
+    assert steps[2]["payload"]["detail"] == "model stopped with 'refusal' (provider said 'SAFETY')"
+
+
+def test_a_stop_relay_has_no_name_for_says_what_it_was_even_after_a_crash(
+    parked_run: tuple[uuid.UUID, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Run a8bee82e ended in `model_stopped` and its reason was lost. Not any more."""
+    from relay.db import pool
+    from scripts.check_run import load_steps
+
+    finish = "MALFORMED_FUNCTION_CALL"
+    api = FakeAPI(lambda _b: httpx2.Response(200, json=reply([{"text": "x"}], finish)))
+    monkeypatch.setattr(factory.settings, "llm_provider", "gemini")
+    monkeypatch.setattr(factory.settings, "gemini_model", MODEL)
+    monkeypatch.setitem(factory._clients, "gemini", api.client())
+    run_id, domain = parked_run
+    expected = f"model stopped with 'other' (provider said {finish!r})"
+
+    assert run_agent(run_id, domain, "w", lambda: True, budget_usd=1.0) is None
+    steps = load_steps(str(run_id))
+    assert [s["kind"] for s in steps] == ["run_started", "model_call", "error"]
+    assert steps[1]["payload"]["stop_reason"] == "other"
+    assert steps[1]["payload"]["finish_reason"] == finish  # on the receipt too
+    assert steps[2]["payload"] == {"reason": "model_stopped", "detail": expected}
+
+    # a worker that died between the two rows: the word comes back from the ledger
+    with pool.connection() as conn:
+        conn.execute("DELETE FROM steps WHERE run_id = %s AND step_index = 2", (run_id,))
+    assert run_agent(run_id, domain, "w2", lambda: True, budget_usd=1.0) is None
+    assert len(api.bodies) == 1  # nothing re-paid
+    assert load_steps(str(run_id))[-1]["payload"]["detail"] == expected
+
+
+def test_a_daily_quota_failure_names_the_quota_in_the_ledger(
+    parked_run: tuple[uuid.UUID, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from scripts.check_run import load_steps
+
+    body = quota_error("GenerateRequestsPerDayPerProjectPerModel-FreeTier")
+    body["error"]["message"] = DAILY_QUOTA_MESSAGE
+    api = FakeAPI(lambda _b: httpx2.Response(429, json=body))
+    monkeypatch.setattr(factory.settings, "llm_provider", "gemini")
+    monkeypatch.setattr(factory.settings, "gemini_model", MODEL)
+    monkeypatch.setitem(factory._clients, "gemini", api.client())
+    run_id, domain = parked_run
+
+    assert run_agent(run_id, domain, "w", lambda: True, budget_usd=1.0) is None
+    assert len(api.bodies) == 1  # fatal: no retries burned
+    error = load_steps(str(run_id))[-1]["payload"]
+    assert error["reason"] == "model_fatal"
+    assert "GenerateRequestsPerDayPerProjectPerModel-FreeTier" in error["detail"]
+    assert "generate_content_free_tier_requests" in error["detail"]
+    assert "model: gemini-3.8-flash" in error["detail"]
 
 
 def test_live_mode_without_a_key_fails_the_run_not_the_worker(

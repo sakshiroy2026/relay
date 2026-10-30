@@ -9,8 +9,9 @@ COMES OUT   A ReplayState: the messages, the next free step index, how many
             model turns are already used and what they cost, how many repair
             re-asks were already spent (Day 9), tool calls that were asked for
             but never confirmed, and whether the run already has a verdict
-            (`final` payload, `error` / `budget_exceeded`, or an end_turn
-            reply not yet judged). A `requeued` row (Day 9) clears the verdict
+            (`final` payload, `error` / `budget_exceeded`, an end_turn reply
+            not yet judged, or a billed stop with no outcome, with the
+            provider's own word for it). A `requeued` row (Day 9) clears the verdict
             before it: the run was put back in the queue by an operator and
             continues from its ledger instead of restarting.
 TOUCHES     replay_ledger: ONE read of the steps table. rebuild_messages:
@@ -62,6 +63,7 @@ class ReplayState:
     failed: bool = False  # an `error` / `budget_exceeded` row with no `requeued` row after it
     unjudged_answer: str | None = None  # last reply was end_turn, died before final/error
     unhandled_stop: str | None = None  # last reply was a billed refusal/max_tokens, no error yet
+    unhandled_finish: str | None = None  # the provider's word for that stop, if its row has one
 
 
 def rebuild_messages(rows: Sequence[Mapping[str, Any]]) -> ReplayState:
@@ -156,6 +158,7 @@ def rebuild_messages(rows: Sequence[Mapping[str, Any]]) -> ReplayState:
             escalated_to=escalated_to,
             last_prompt_tokens=last_prompt,
             unhandled_stop=last_reply["stop_reason"],
+            unhandled_finish=last_reply.get("finish_reason"),
         )
 
     # The worker died after writing a final-looking reply but before judging it.

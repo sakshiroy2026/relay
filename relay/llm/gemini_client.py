@@ -10,9 +10,11 @@ GOES IN     call(model, system, messages, tools): the same four things the fake
             gets. An assistant message may carry `raw`: the provider's reply
             parts as stored in the ledger; they are sent back VERBATIM.
 COMES OUT   Response with the answer text (thought parts excluded), tool calls,
-            a mapped stop reason, token counts split into uncached / cache read
-            / output (thinking counted as output, which is how Google bills it),
-            and raw_content: every reply part, `thoughtSignature`s included.
+            a mapped stop reason plus Gemini's own word for it (`finish_reason`:
+            the finishReason, or the blockReason of a blocked prompt), token
+            counts split into uncached / cache read / output (thinking counted
+            as output, which is how Google bills it), and raw_content: every
+            reply part, `thoughtSignature`s included.
 TOUCHES     The network (generativelanguage.googleapis.com) over httpx2 — the
             HTTP client the Anthropic SDK already pulls in, so no new
             dependency. The key is read once from GEMINI_API_KEY and sent as the
@@ -24,9 +26,12 @@ FAILS WHEN  No GEMINI_API_KEY -> RuntimeError at construction, before any call
             A 429 whose quota is the DAILY free-tier allowance -> FatalError:
             no amount of backoff brings it back today, so it must not burn
             every retry. Everything else (400, 401, 403, 404) -> FatalError and
-            a `model_fatal` error step. A refusal or a max-tokens stop is NOT
-            an exception: the call was metered, so it comes back as a Response
-            with that stop reason, the loop records it, then fails the run.
+            a `model_fatal` error step. Both carry the API's status and message
+            and the id of any quota broken, up to ERROR_TEXT_LIMIT characters;
+            never a header, and the key is cut out if the body echoes it. A
+            refusal or a max-tokens stop is NOT an exception: the call was
+            metered, so it comes back as a Response with that stop reason, the
+            loop records it, then fails the run.
 
 Why raw parts: Gemini returns a `thoughtSignature` on the parts of a thinking
 turn, and those signatures are only valid inside the conversation that produced
@@ -65,9 +70,13 @@ SIGNATURE_TROUBLE = "thought signature"  # the 400's wording when a replayed sig
 DAILY_QUOTA_MARKERS = ("perday", "per day", "requestsperday")
 SYNTHETIC_ID_PREFIX = "relayfc-"  # marks a tool-call id Relay minted, not Gemini
 THINKING_LEVEL_MODELS = ("gemini-3",)  # the generation that spells it `thinkingLevel`
+# A quota 429's message spends ~240 characters on links before it names the metric
+# and the model, then one line per quota broken. This keeps all of that.
+ERROR_TEXT_LIMIT = 1000
 
 # finishReason -> Relay's stop reason. A reply with a functionCall in it is a
 # tool turn whatever the finish reason says, so that case is handled first.
+# Any other word becomes "other", and Response.finish_reason keeps which it was.
 _STOP: dict[str, StopReason] = {
     "STOP": "end_turn",
     "MAX_TOKENS": "max_tokens",
@@ -222,9 +231,10 @@ def to_response(requested_model: str, body: dict[str, Any], turn: int) -> Respon
     ]
 
     finish = str(candidate.get("finishReason") or "")
+    blocked = str((body.get("promptFeedback") or {}).get("blockReason") or "")
     if tool_calls:
         stop: StopReason = "tool_use"
-    elif not candidates and (body.get("promptFeedback") or {}).get("blockReason"):
+    elif not candidates and blocked:
         stop = "refusal"  # the prompt itself was blocked: metered, nothing to act on
     else:
         stop = _STOP.get(finish, "other")
@@ -242,19 +252,40 @@ def to_response(requested_model: str, body: dict[str, Any], turn: int) -> Respon
         cache_write_tokens=0,
         raw_content=copy.deepcopy(parts),  # verbatim: thought signatures ride along
         served_model=body.get("modelVersion") or None,
+        finish_reason=finish or blocked or None,
     )
 
 
 # ── errors ───────────────────────────────────────────────────────────────
-def _error_text(response: httpx2.Response) -> str:
-    """The API's own message, never a header: headers carry the key."""
+def _quota_ids(error: dict[str, Any]) -> list[str]:
+    """Which quotas a 429 broke. Only the id: the rest of `details` isn't ours to quote."""
+    ids = [
+        str(violation["quotaId"])
+        for detail in error.get("details") or []
+        for violation in detail.get("violations") or []
+        if violation.get("quotaId")
+    ]
+    return list(dict.fromkeys(ids))  # each once, in the API's order
+
+
+def _error_text(response: httpx2.Response, key: str) -> str:
+    """The API's own message, never a header: headers carry the key.
+
+    The quota ids come first, so a message that runs long only loses its end. The
+    key is cut out BEFORE the text is shortened, or half a key could survive the cut.
+    """
+    message, status = "", ""
+    quotas: list[str] = []
     try:
-        detail = response.json().get("error") or {}
-        message = str(detail.get("message") or "")
-        status = str(detail.get("status") or "")
+        error = response.json().get("error") or {}
+        message = str(error.get("message") or "")
+        status = str(error.get("status") or "")
+        quotas = _quota_ids(error)
     except Exception:
-        message, status = "", ""
-    return f"{response.status_code}: {status or response.reason_phrase} {message}".strip()[:300]
+        pass  # an unexpected body: whatever was read so far still says something
+    named = f" [quota: {', '.join(quotas)}]" if quotas else ""
+    text = f"{response.status_code}: {status or response.reason_phrase}{named} {message}".strip()
+    return text.replace(key, "[key]")[:ERROR_TEXT_LIMIT]
 
 
 def is_daily_quota(response: httpx2.Response) -> bool:
@@ -284,6 +315,7 @@ class GeminiLLMClient:
         # One client per process: it keeps a connection pool, like the SDK does.
         # Relay retries itself (Day 8), so every attempt is counted once in the ledger.
         self._client = client or httpx2.Client(timeout=settings.llm_timeout_seconds)
+        self._key = key
         self._headers = {"x-goog-api-key": key, "Content-Type": "application/json"}
 
     def generate(self, model: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -304,10 +336,10 @@ class GeminiLLMClient:
         if response.status_code == 429 and is_daily_quota(response):
             # the free tier's daily allowance is gone until midnight Pacific:
             # fatal on purpose, so the run ends honestly instead of retrying
-            raise FatalError(f"model daily quota exhausted ({_error_text(response)})")
+            raise FatalError(f"model daily quota exhausted ({_error_text(response, self._key)})")
         if response.status_code in RETRYABLE_STATUS or response.status_code >= 500:
-            raise RetryableError(f"model unavailable ({_error_text(response)})")
-        raise FatalError(f"model request rejected ({_error_text(response)})")
+            raise RetryableError(f"model unavailable ({_error_text(response, self._key)})")
+        raise FatalError(f"model request rejected ({_error_text(response, self._key)})")
 
     def call(
         self,

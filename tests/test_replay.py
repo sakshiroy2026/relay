@@ -192,6 +192,26 @@ def test_end_turn_reply_without_verdict_is_unjudged() -> None:
     assert state.next_index == 6
 
 
+def test_a_billed_stop_without_an_error_row_keeps_the_providers_word() -> None:
+    # died after writing the model_call of a stop with no outcome, before its `error` row
+    stopped = model_call(5, turn=FINAL_TURN)
+    stopped["payload"] |= {"stop_reason": "other", "finish_reason": "MALFORMED_FUNCTION_CALL"}
+    state = rebuild_messages([*FIRST_FIVE, stopped])
+
+    assert state.unhandled_stop == "other"
+    assert state.unhandled_finish == "MALFORMED_FUNCTION_CALL"
+
+
+def test_a_billed_stop_written_before_the_field_existed_still_replays() -> None:
+    stopped = model_call(5, turn=FINAL_TURN)
+    stopped["payload"]["stop_reason"] = "refusal"
+    del stopped["payload"]["finish_reason"]
+    state = rebuild_messages([*FIRST_FIVE, stopped])
+
+    assert state.unhandled_stop == "refusal"
+    assert state.unhandled_finish is None
+
+
 def test_ledger_without_run_started_is_a_bug() -> None:
     with pytest.raises(RuntimeError):
         rebuild_messages([model_call(0, turn=0)])
