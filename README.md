@@ -6,6 +6,10 @@ An agent run must survive the worker process being killed at any moment, resume 
 
 Instead of an agent loop living in a process that dies when the process dies, every model call and every tool invocation is appended to a write-ahead ledger in PostgreSQL. If a worker crashes, is deployed over, or hits a rate limit, another worker picks the run up and continues from the exact step where it stopped — without re-issuing model calls already paid for, and without re-executing side effects already applied.
 
+**Demo video (90 s, captions, no voice):** a real Gemini run on the live site (`43dbe30f`, zomato.com, 10 Nov 2026), killed from the page's button. A second worker took over at step 10 and finished it on attempt 2.
+
+https://github.com/user-attachments/assets/6bdd1153-fbc1-4a03-b3ed-5061b4431dc6
+
 ![Demo page: worker 20a728 was killed after step 3; worker 0f4d83 took over at step 4 and finished the run](learn/img/frontend-takeover.jpg)
 
 *The demo page during run `783a03b3`: the worker that owned the run was killed with `docker kill` after step 3; another worker replayed the ledger and continued at step 4.*
